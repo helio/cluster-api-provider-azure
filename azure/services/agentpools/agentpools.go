@@ -22,9 +22,10 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2021-05-01/containerservice"
+	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
-	infrav1alpha4 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
+	infrav1beta1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-azure/azure"
 	"sigs.k8s.io/cluster-api-provider-azure/azure/converters"
 	"sigs.k8s.io/cluster-api-provider-azure/util/maps"
@@ -43,6 +44,8 @@ type ManagedMachinePoolScope interface {
 	SetAgentPoolProviderIDList([]string)
 	SetAgentPoolReplicas(int32)
 	SetAgentPoolReady(bool)
+	UpdateCAPIMachinePoolReplicas(ctx context.Context, replicas *int32)
+	UpdateCAPIMachinePoolAnnotations(ctx context.Context, key, value string)
 }
 
 // Service provides operations on Azure resources.
@@ -96,7 +99,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		}
 	} else {
 		ps := *existingPool.ManagedClusterAgentPoolProfileProperties.ProvisioningState
-		if ps != string(infrav1alpha4.Canceled) && ps != string(infrav1alpha4.Failed) && ps != string(infrav1alpha4.Succeeded) {
+		if ps != string(infrav1beta1.Canceled) && ps != string(infrav1beta1.Failed) && ps != string(infrav1beta1.Succeeded) {
 			msg := fmt.Sprintf("Unable to update existing agent pool in non terminal state. Agent pool must be in one of the following provisioning states: canceled, failed, or succeeded. Actual state: %s", ps)
 			log.V(2).Info(msg)
 			return azure.WithTransientError(errors.New(msg), 20*time.Second)
@@ -123,6 +126,25 @@ func (s *Service) Reconcile(ctx context.Context) error {
 				MinCount:            profile.MinCount,
 				MaxCount:            profile.MaxCount,
 			},
+		}
+
+		// When autoscaling is set, the count of the nodes differ based on the autoscaler and should not depend on the
+		// count present in MachinePool or AzureManagedMachinePool, hence we should not make an update API call based
+		// on difference in count.
+		if to.Bool(profile.EnableAutoScaling) && existingProfile.Count != nil {
+			if to.Bool(profile.EnableAutoScaling) && !to.Bool(existingProfile.EnableAutoScaling) {
+				s.scope.UpdateCAPIMachinePoolAnnotations(ctx, azure.ReplicasManagedByAutoscalerAnnotation, "true")
+			}
+
+			if to.Int32(existingProfile.Count) != to.Int32(normalizedProfile.Count) {
+				s.scope.UpdateCAPIMachinePoolReplicas(ctx, existingProfile.Count)
+			}
+			normalizedProfile.Count = existingProfile.Count
+		}
+
+		// set ReplicasManagedByAutoscalerAnnotation to false as it is disabled by the user.
+		if !to.Bool(profile.EnableAutoScaling) && to.Bool(existingProfile.EnableAutoScaling) {
+			s.scope.UpdateCAPIMachinePoolAnnotations(ctx, azure.ReplicasManagedByAutoscalerAnnotation, "false")
 		}
 
 		// Diff and check if we require an update
