@@ -51,7 +51,7 @@ type (
 		SetAnnotation(string, string)
 		SetProviderID(string)
 		SetVMSSState(*azure.VMSS)
-		ReconcileReplicas(context.Context, *azure.VMSS) error
+		ReconcileReplicas(context.Context, *azure.VMSS) (bool, error)
 	}
 
 	// Service provides operations on Azure resources.
@@ -254,9 +254,11 @@ func (s *Service) patchVMSSIfNeeded(ctx context.Context, infraVMSS *azure.VMSS) 
 	ctx, log, done := tele.StartSpanWithLogger(ctx, "scalesets.Service.patchVMSSIfNeeded")
 	defer done()
 
-	if err := s.Scope.ReconcileReplicas(ctx, infraVMSS); err != nil {
+	updated, err := s.Scope.ReconcileReplicas(ctx, infraVMSS)
+	if err != nil {
 		return nil, errors.Wrap(err, "unable to reconcile replicas")
 	}
+	log.V(4).Info("reconciled replicas", "updated", updated)
 
 	spec := s.Scope.ScaleSetSpec()
 
@@ -285,7 +287,7 @@ func (s *Service) patchVMSSIfNeeded(ctx context.Context, infraVMSS *azure.VMSS) 
 
 	// If there are no model changes and no increase in the replica count, do not update the VMSS.
 	// Decreases in replica count is handled by deleting AzureMachinePoolMachine instances in the MachinePoolScope
-	if *patch.Sku.Capacity <= infraVMSS.Capacity && !hasModelChanges {
+	if !updated && *patch.Sku.Capacity <= infraVMSS.Capacity && !hasModelChanges {
 		log.V(4).Info("nothing to update on vmss", "scale set", spec.Name, "newReplicas", *patch.Sku.Capacity, "oldReplicas", infraVMSS.Capacity, "hasChanges", hasModelChanges)
 		return nil, nil
 	}

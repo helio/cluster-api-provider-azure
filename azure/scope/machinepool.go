@@ -737,19 +737,21 @@ func (m *MachinePoolScope) HasReplicasExternallyManaged(ctx context.Context) boo
 }
 
 // ReconcileReplicas ensures MachinePool replicas match VMSS capacity if replicas are externally managed by an autoscaler.
-func (m *MachinePoolScope) ReconcileReplicas(ctx context.Context, vmss *azure.VMSS) error {
+func (m *MachinePoolScope) ReconcileReplicas(ctx context.Context, vmss *azure.VMSS) (bool, error) {
 	if !m.HasReplicasExternallyManaged(ctx) {
-		return nil
+		return false, nil
 	}
 
 	var replicas int32 = 0
+	updated := false
 	if m.MachinePool.Spec.Replicas != nil {
 		replicas = *m.MachinePool.Spec.Replicas
 	}
 
 	if capacity := int32(vmss.Capacity); capacity != replicas {
 		m.UpdateCAPIMachinePoolReplicas(ctx, &capacity)
+		updated = true
 	}
 
-	return nil
+	return updated, nil
 }
