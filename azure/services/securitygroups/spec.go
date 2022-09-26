@@ -66,14 +66,17 @@ func (s *NSGSpec) Parameters(existing interface{}) (interface{}, error) {
 		etag = existingNSG.Etag
 		// Check if the expected rules are present
 		update := false
-		securityRules = *existingNSG.SecurityRules
-		for _, rule := range s.SecurityRules {
-			sdkRule := converters.SecurityRuleToSDK(rule)
-			if !ruleExists(securityRules, sdkRule) {
-				update = true
-				securityRules = append(securityRules, sdkRule)
+		if existingNSG.SecurityGroupPropertiesFormat != nil && existingNSG.SecurityRules != nil {
+			securityRules = *existingNSG.SecurityRules
+			for _, rule := range s.SecurityRules {
+				sdkRule := converters.SecurityRuleToSDK(rule)
+				if !ruleExists(securityRules, sdkRule) {
+					update = true
+					securityRules = append(securityRules, sdkRule)
+				}
 			}
 		}
+
 		if !update {
 			// Skip update for NSG as the required default rules are present
 			return nil, nil

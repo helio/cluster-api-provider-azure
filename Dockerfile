@@ -34,6 +34,8 @@ COPY go.sum go.sum
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
 # Copy the sources
 COPY ./ ./
 
@@ -51,13 +53,14 @@ ARG ldflags
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} \
-    go build -ldflags "${ldflags} -extldflags '-static'" \
+    go build -gcflags "all=-N -l" -ldflags "${ldflags} -extldflags '-static'" \
     -o manager ${package}
 
 # Production image
-FROM gcr.io/distroless/static:nonroot-${ARCH}
+FROM gcr.io/distroless/base:debug
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /go/bin/dlv .
 # Use uid of nonroot user (65532) because kubernetes expects numeric user when applying pod security policies
 USER 65532
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["/dlv", "--accept-multiclient", "--api-version=2", "--headless=true", "--listen=:30000", "exec", "--continue", "--", "/manager"]
