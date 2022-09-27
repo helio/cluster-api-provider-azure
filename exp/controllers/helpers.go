@@ -32,6 +32,7 @@ import (
 	infrav1exp "sigs.k8s.io/cluster-api-provider-azure/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-azure/util/reconciler"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	kubeadmv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	expv1 "sigs.k8s.io/cluster-api/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -469,6 +470,62 @@ func MachinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind, log logr.Lo
 					Namespace: m.Namespace,
 					Name:      ref.Name,
 				},
+			},
+		}
+	}
+}
+
+func KubeadmConfigToInfrastructureMapFunc(ctx context.Context, c client.Client, log logr.Logger) handler.MapFunc {
+	return func(o client.Object) []reconcile.Request {
+		ctx, cancel := context.WithTimeout(ctx, reconciler.DefaultMappingTimeout)
+		defer cancel()
+
+		kc, ok := o.(*kubeadmv1.KubeadmConfig)
+		if !ok {
+			log.V(4).Info("attempt to map incorrect type", "type", fmt.Sprintf("%T", o))
+			return nil
+		}
+
+		mpKey := client.ObjectKey{
+			Namespace: kc.Namespace,
+			Name:      kc.Name,
+		}
+
+		// fetch MachinePool to get reference
+		mp := &expv1.MachinePool{}
+		if err := c.Get(ctx, mpKey, mp); err != nil {
+			log.Error(err, "failed to fetch MachinePool for KubeadmConfig")
+			return []reconcile.Request{}
+		}
+
+		ref := mp.Spec.Template.Spec.Bootstrap.ConfigRef
+		if ref == nil {
+			log.V(4).Info("fetched MachinePool has no Bootstrap.ConfigRef")
+			return []reconcile.Request{}
+		}
+		sameKind := ref.Kind != o.GetObjectKind().GroupVersionKind().Kind
+		sameName := ref.Name == kc.Name
+		sameNamespace := ref.Namespace == kc.Namespace
+		if !sameKind || !sameName || !sameNamespace {
+			log.V(4).Info("Bootstrap.ConfigRef does not match",
+				"sameKind", sameKind,
+				"ref kind", ref.Kind,
+				"other kind", o.GetObjectKind().GroupVersionKind().Kind,
+				"sameName", sameName,
+				"sameNamespace", sameNamespace,
+			)
+			return []reconcile.Request{}
+		}
+
+		key := client.ObjectKey{
+			Namespace: kc.Namespace,
+			Name:      kc.Name,
+		}
+		log.V(4).Info("adding KubeadmConfig to watch", "key", key)
+
+		return []reconcile.Request{
+			{
+				NamespacedName: key,
 			},
 		}
 	}
