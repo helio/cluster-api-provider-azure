@@ -494,7 +494,9 @@ func KubeadmConfigToInfrastructureMapFunc(ctx context.Context, c client.Client, 
 		// fetch MachinePool to get reference
 		mp := &expv1.MachinePool{}
 		if err := c.Get(ctx, mpKey, mp); err != nil {
-			log.Error(err, "failed to fetch MachinePool for KubeadmConfig")
+			if !apierrors.IsNotFound(err) {
+				log.Error(err, "failed to fetch MachinePool for KubeadmConfig")
+			}
 			return []reconcile.Request{}
 		}
 
