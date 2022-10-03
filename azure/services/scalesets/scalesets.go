@@ -717,6 +717,9 @@ func (s *Service) generateOSProfile(ctx context.Context, vmssSpec azure.ScaleSet
 		osProfile.AdminPassword = to.StringPtr(generators.SudoRandomPassword(123))
 		osProfile.WindowsConfiguration = &compute.WindowsConfiguration{
 			EnableAutomaticUpdates: to.BoolPtr(false),
+			PatchSettings: &compute.PatchSettings{
+				PatchMode: compute.WindowsVMGuestPatchModeManual,
+			},
 		}
 	default:
 		osProfile.LinuxConfiguration = &compute.LinuxConfiguration{
