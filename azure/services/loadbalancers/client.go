@@ -50,8 +50,10 @@ func newLoadBalancersClient(subscriptionID string, baseURI string, authorizer au
 
 // Get gets the specified load balancer.
 func (ac *azureClient) Get(ctx context.Context, spec azure.ResourceSpecGetter) (result interface{}, err error) {
-	ctx, _, done := tele.StartSpanWithLogger(ctx, "loadbalancers.azureClient.Get")
+	ctx, log, done := tele.StartSpanWithLogger(ctx, "loadbalancers.azureClient.Get")
 	defer done()
+
+	log.Info(">>>>>>>>>> LB GET", "resourceGroupName", spec.ResourceGroupName(), "resourceName", spec.ResourceName())
 
 	return ac.loadbalancers.Get(ctx, spec.ResourceGroupName(), spec.ResourceName(), "")
 }
@@ -60,7 +62,7 @@ func (ac *azureClient) Get(ctx context.Context, spec azure.ResourceSpecGetter) (
 // It sends a PUT request to Azure and if accepted without error, the func will return a Future which can be used to track the ongoing
 // progress of the operation.
 func (ac *azureClient) CreateOrUpdateAsync(ctx context.Context, spec azure.ResourceSpecGetter, parameters interface{}) (result interface{}, future azureautorest.FutureAPI, err error) {
-	ctx, _, done := tele.StartSpanWithLogger(ctx, "loadbalancers.azureClient.CreateOrUpdate")
+	ctx, log, done := tele.StartSpanWithLogger(ctx, "loadbalancers.azureClient.CreateOrUpdate")
 	defer done()
 
 	loadBalancer, ok := parameters.(network.LoadBalancer)
@@ -73,6 +75,9 @@ func (ac *azureClient) CreateOrUpdateAsync(ctx context.Context, spec azure.Resou
 		etag = *loadBalancer.Etag
 	}
 
+	log.Info(">>>>>>>>>> LB CREATE OR UPDATE", "resourceGroupName", spec.ResourceGroupName(), "resourceName", spec.ResourceName(), "spec", spec)
+	log.Info("!!!!!!!!!!! LB params", "parameters", parameters)
+
 	req, err := ac.loadbalancers.CreateOrUpdatePreparer(ctx, spec.ResourceGroupName(), spec.ResourceName(), loadBalancer)
 	if err != nil {
 		err = autorest.NewErrorWithError(err, "network.LoadBalancersClient", "CreateOrUpdate", nil, "Failure preparing request")
@@ -83,8 +88,11 @@ func (ac *azureClient) CreateOrUpdateAsync(ctx context.Context, spec azure.Resou
 		req.Header.Add("If-Match", etag)
 	}
 
+	log.Info("after preparer", "URL", req.URL)
+
 	createFuture, err := ac.loadbalancers.CreateOrUpdateSender(req)
 	if err != nil {
+		log.Error(err, "######### LB err")
 		res := createFuture.Response()
 		err = autorest.NewErrorWithError(err, "network.LoadBalancersClient", "CreateOrUpdate", res, "Failure sending request")
 		// response body must be closed
@@ -103,6 +111,8 @@ func (ac *azureClient) CreateOrUpdateAsync(ctx context.Context, spec azure.Resou
 	}
 
 	result, err = createFuture.Result(ac.loadbalancers)
+
+	log.Error(err, "######### LB return err")
 	// if the operation completed, return a nil future
 	return result, nil, err
 }

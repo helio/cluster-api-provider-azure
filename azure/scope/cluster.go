@@ -228,27 +228,30 @@ func (s *ClusterScope) PublicIPSpecs() []azure.ResourceSpecGetter {
 
 // LBSpecs returns the load balancer specs.
 func (s *ClusterScope) LBSpecs() []azure.ResourceSpecGetter {
-	specs := []azure.ResourceSpecGetter{
-		&loadbalancers.LBSpec{
-			// API Server LB
-			Name:                 s.APIServerLB().Name,
-			ResourceGroup:        s.ResourceGroup(),
-			SubscriptionID:       s.SubscriptionID(),
-			ClusterName:          s.ClusterName(),
-			Location:             s.Location(),
-			VNetName:             s.Vnet().Name,
-			VNetResourceGroup:    s.Vnet().ResourceGroup,
-			SubnetName:           s.ControlPlaneSubnet().Name,
-			FrontendIPConfigs:    s.APIServerLB().FrontendIPs,
-			APIServerPort:        s.APIServerPort(),
-			Type:                 s.APIServerLB().Type,
-			SKU:                  infrav1.SKUStandard,
-			Role:                 infrav1.APIServerRole,
-			BackendPoolName:      s.APIServerLB().BackendPool.Name,
-			IdleTimeoutInMinutes: s.APIServerLB().IdleTimeoutInMinutes,
-			AdditionalTags:       s.AdditionalTags(),
-		},
+	lbSpec := loadbalancers.LBSpec{
+		// API Server LB
+		Name:                 s.APIServerLB().Name,
+		ResourceGroup:        s.ResourceGroup(),
+		SubscriptionID:       s.SubscriptionID(),
+		ClusterName:          s.ClusterName(),
+		Location:             s.Location(),
+		VNetName:             s.Vnet().Name,
+		VNetResourceGroup:    s.Vnet().ResourceGroup,
+		SubnetName:           s.ControlPlaneSubnet().Name,
+		FrontendIPConfigs:    s.APIServerLB().FrontendIPs,
+		APIServerPort:        s.APIServerPort(),
+		Type:                 s.APIServerLB().Type,
+		SKU:                  infrav1.SKUStandard,
+		Role:                 infrav1.APIServerRole,
+		BackendPoolName:      s.APIServerLB().BackendPool.Name,
+		IdleTimeoutInMinutes: s.APIServerLB().IdleTimeoutInMinutes,
+		AdditionalTags:       s.AdditionalTags(),
 	}
+	specs := []azure.ResourceSpecGetter{
+		&lbSpec,
+	}
+
+	fmt.Printf("ClusterScope.LBSpecs.BackendPoolName: %q\n", lbSpec.BackendPoolName)
 
 	// Node outbound LB
 	if s.NodeOutboundLB() != nil {

@@ -194,6 +194,7 @@ func (c *AzureCluster) setAPIServerLBDefaults() {
 		}
 	}
 
+	fmt.Printf("########################### DEFAULTER / bpname: %q / genrated: %q\n", lb.BackendPool.Name, generateBackendAddressPoolName(lb.Name))
 	if lb.BackendPool.Name == "" {
 		lb.BackendPool.Name = generateBackendAddressPoolName(lb.Name)
 	}

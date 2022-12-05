@@ -1,0 +1,208 @@
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  labels:
+    cni: calico
+  name: azure-eu-v4
+  namespace: supplier-azure
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - 192.168.0.0/16
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: eu-v4-ctrl-plane-001
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: AzureCluster
+    name: azure-eu-v4
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: eu-v4-ctrl-plane-001
+  namespace: supplier-azure
+spec:
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      apiServer:
+        extraArgs:
+          cloud-config: /etc/kubernetes/azure.json
+          cloud-provider: azure
+        extraVolumes:
+          - hostPath: /etc/kubernetes/azure.json
+            mountPath: /etc/kubernetes/azure.json
+            name: cloud-config
+            readOnly: true
+        timeoutForControlPlane: 20m0s
+      controllerManager:
+        extraArgs:
+          allocate-node-cidrs: "false"
+          cloud-config: /etc/kubernetes/azure.json
+          cloud-provider: azure
+          cluster-name: azure-eu-v4
+          configure-cloud-routes: "true"
+          bind-address: 0.0.0.0
+        extraVolumes:
+          - hostPath: /etc/kubernetes/azure.json
+            mountPath: /etc/kubernetes/azure.json
+            name: cloud-config
+            readOnly: true
+      scheduler:
+        extraArgs:
+          bind-address: 0.0.0.0
+      dns: {}
+      etcd:
+        local:
+          dataDir: /var/lib/etcddisk/etcd
+          extraArgs:
+            quota-backend-bytes: "8589934592"
+      networking: {}
+    diskSetup:
+      filesystems:
+        - device: /dev/disk/azure/scsi1/lun0
+          extraOpts:
+            - -E
+            - lazy_itable_init=1,lazy_journal_init=1
+          filesystem: ext4
+          label: etcd_disk
+        - device: ephemeral0.1
+          filesystem: ext4
+          label: ephemeral0
+          replaceFS: ntfs
+      partitions:
+        - device: /dev/disk/azure/scsi1/lun0
+          layout: true
+          overwrite: false
+          tableType: gpt
+    files:
+      - contentFrom:
+          secret:
+            key: control-plane-azure.json
+            name: eu-v4-ctrl-plane-001-azure-json
+        owner: root:root
+        path: /etc/kubernetes/azure.json
+        permissions: "0644"
+    format: cloud-config
+    initConfiguration:
+      localAPIEndpoint: {}
+      nodeRegistration:
+        kubeletExtraArgs:
+          azure-container-registry-config: /etc/kubernetes/azure.json
+          cloud-config: /etc/kubernetes/azure.json
+          cloud-provider: azure
+        name: '{{ ds.meta_data["local_hostname"] }}'
+    joinConfiguration:
+      discovery: {}
+      nodeRegistration:
+        kubeletExtraArgs:
+          azure-container-registry-config: /etc/kubernetes/azure.json
+          cloud-config: /etc/kubernetes/azure.json
+          cloud-provider: azure
+        name: '{{ ds.meta_data["local_hostname"] }}'
+    mounts:
+      - - LABEL=etcd_disk
+        - /var/lib/etcddisk
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: AzureMachineTemplate
+      name: eu-v4-ctrl-plane-001
+    metadata: {}
+  replicas: 1
+  rolloutStrategy:
+    rollingUpdate:
+      maxSurge: 1
+    type: RollingUpdate
+  version: v1.24.8
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureCluster
+metadata:
+  name: azure-eu-v4
+  namespace: supplier-azure
+spec:
+  azureEnvironment: AzurePublicCloud
+  bastionSpec: {}
+  identityRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: AzureClusterIdentity
+    name: azure-eu-v4-identity
+  location: westeurope
+  networkSpec:
+    subnets:
+      - cidrBlocks:
+          - 10.0.0.0/16
+        name: control-plane-subnet
+        role: control-plane
+      - cidrBlocks:
+          - 10.1.0.0/16
+        name: node-subnet
+        role: node
+        natGateway:
+          name: node-natgw
+      - cidrBlocks:
+          - 10.10.0.0/16
+        name: spot-subnet
+        role: node
+        natGateway:
+          name: node-natgw
+    vnet:
+      cidrBlocks:
+        - 10.0.0.0/8
+      name: azure-eu-v4-vnet
+    apiServerLB:
+      name: azure-eu-v4-public-lb
+  resourceGroup: azure-eu-v4
+  subscriptionID: ${AZURE_SUBSCRIPTION_ID}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureMachineTemplate
+metadata:
+  name: eu-v4-ctrl-plane-001
+  namespace: supplier-azure
+spec:
+  template:
+    metadata: {}
+    spec:
+      dataDisks:
+        - cachingType: ReadWrite
+          diskSizeGB: 256
+          lun: 0
+          nameSuffix: etcddisk
+      identity: None
+      image:
+        sharedGallery:
+          gallery: helioGallery
+          name: linux-gen2-capi
+          offer: HelioImages
+          resourceGroup: packer
+          subscriptionID: 5488c00b-3281-43ae-9c73-d6a33656e385
+          sku: LinuxGen2CAPI
+          version: 0.7.0
+      osDisk:
+        cachingType: ReadOnly
+        diskSizeGB: 150
+        osType: Linux
+        diffDiskSettings:
+          option: Local # ephemeral OS disk
+      sshPublicKey: c3NoLXJzYSBBQUFBQjNOemFDMXljMkVBQUFBREFRQUJBQUFDQVFDMUlIeG9IRWhJZmJuZU1XK0p6QkRza20rYzVDcVludFE3ZVMxaG5UNkJCc0Y4YVEvWmpFN0VNVjR0WmhDczRzVjBPWjdvOGxRNFUzRnJZQmgvUmltM0djUXVIa2YzUS9nTE1UZFpLRVZVd1FKMkpUcVcrOFpBK3hnVk1ESENXS1dXYVVnN2o0SEg3dW1jcURsWU02ZFNUTzVUQTlrL0VUQlBQMXAwdXIxdTliQjVzSmlxeVRtN2Z6YS8wWmVBVXdhcTUxcytleGxmQXFuNGZuZWlQc241MGYvOGZNbHdDc1RybkpnbnJNeHlIdGZFcWRkejM3S0Urd1piNktGdUV6b0JTeGNOQlFwaUpraFlrdjRqdVpFRFQ5MUE4NVdHalEzY1BlNjFIakNuYXNpREt1YzQyOExnMTdIRmNPL2J4YlFxbmVtR1NtM2xjWm4vQ1BZb3VZd1pQSTNFYUkvdVBwUXVBMSt1WGFYZzhncW9mNFpFUzkxMjJ1OFJWZ1BYNmVKZlJnU2U1MERWRC9lSGN6RTlsRzhJRHZ3M1RQNnZ4WDNST0RDNmRpdnVmSVJpejVQcitSaDVDbTNjUGY5aXFvenB5ZE5ibndRL1NHR0hJZjdOOGwzbm1KeGFnZHhtcW4zVHZWcjFaTTZ1dFhnd01PSE1venhrQ3ZQa29lRm5hbXRGbVRuUzNXcGxMQ2ZtVWhRWS9IWitWWEhBKzFKKzlacW5pKzBPVWMrNWlqaXhNazdTVlRLc1ZsWHNrb3pIQThLQk1zTkZVTHhWSWpxbFFZNHI1dHdCbnRaMzZ3SEtPSUFlaHJVenJzOTEwc0hmc2IxdnJ0SEVsUUNFdTJXckFXUWUwaXVTYVRkcXBYcTdSdEJzdmJiK0kxTk5wRmNkT2dCQjMwM0hoOXA2Z3c9PSBhenVyZQo=
+      vmSize: Standard_D4ads_v5
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureClusterIdentity
+metadata:
+  labels:
+    clusterctl.cluster.x-k8s.io/move-hierarchy: "true"
+  name: azure-eu-v4-identity
+  namespace: default
+spec:
+  allowedNamespaces: {}
+  clientID: ${AZURE_CLIENT_ID}
+  clientSecret:
+    name: ${AZURE_CLUSTER_IDENTITY_SECRET_NAME}
+    namespace: ${AZURE_CLUSTER_IDENTITY_SECRET_NAMESPACE}
+  tenantID: ${AZURE_TENANT_ID}
+  type: ServicePrincipal

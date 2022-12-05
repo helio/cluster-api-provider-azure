@@ -18,6 +18,7 @@ package loadbalancers
 
 import (
 	"context"
+	"fmt"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-azure/azure"
@@ -78,6 +79,8 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	//  Order of precedence (highest -> lowest) is: error that is not an operationNotDoneError (i.e. error creating) -> operationNotDoneError (i.e. creating in progress) -> no error (i.e. created)
 	var result error
 	for _, lbSpec := range specs {
+		params, err := lbSpec.Parameters(nil)
+		fmt.Printf("spec:\n\trn: %s\n\trgn: %s\n\tparams: %+#v\n\terr: %v\n\torn: %+#v\n", lbSpec.ResourceName(), lbSpec.ResourceGroupName(), params, err, lbSpec.OwnerResourceName())
 		if _, err := s.CreateOrUpdateResource(ctx, lbSpec, serviceName); err != nil {
 			if !azure.IsOperationNotDoneError(err) || result == nil {
 				result = err
