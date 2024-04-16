@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
@@ -92,6 +93,8 @@ func (s *ScaleSetSpec) OwnerResourceName() string {
 }
 
 func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interface{}) (parameters interface{}, err error) {
+	logger := log.FromContext(ctx).WithName("MYTEST")
+
 	existingVMSS, ok := existing.(armcompute.VirtualMachineScaleSet)
 	if !ok {
 		return nil, errors.Errorf("%T is not an armcompute.VirtualMachineScaleSet", existing)
@@ -119,6 +122,7 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 		updated = existingInfraVMSS.HasEnoughLatestModelOrNotMixedModel()
 	}
 	if s.MaxSurge > 0 && (hasModelChanges || !updated) && !s.HasReplicasExternallyManaged {
+		logger.Info("############################", "maxSurge", s.MaxSurge, "hasModelChanges", hasModelChanges, "updated", updated, "HasReplicasExternallyManaged", s.HasReplicasExternallyManaged)
 		// surge capacity with the intention of lowering during instance reconciliation
 		surge := s.Capacity + int64(s.MaxSurge)
 		vmss.SKU.Capacity = ptr.To[int64](surge)
@@ -127,6 +131,12 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 	// If there are no model changes and no increase in the replica count, do not update the VMSS.
 	// Decreases in replica count is handled by deleting AzureMachinePoolMachine instances in the MachinePoolScope
 	if *vmss.SKU.Capacity <= existingInfraVMSS.Capacity && !hasModelChanges && !s.ShouldPatchCustomData {
+		logger.Info("############################",
+			"skuCap", *vmss.SKU.Capacity,
+			"existingInfraVMSS.Capacity", existingInfraVMSS.Capacity,
+			"hasModelChanges", hasModelChanges,
+			"s.ShouldPatchCustomData", s.ShouldPatchCustomData,
+		)
 		// up to date, nothing to do
 		return nil, nil
 	}

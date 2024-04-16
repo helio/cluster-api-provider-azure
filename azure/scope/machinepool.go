@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v2"
@@ -232,6 +233,8 @@ func (m *MachinePoolScope) ScaleSetSpec(ctx context.Context) azure.ResourceSpecG
 	} else {
 		log.V(4).Info("machinepool cache is nil, this is only expected when deleting a machinepool")
 	}
+
+	log.Info("ScaleSetSpec########", "maxSurge", spec.MaxSurge, "Capacity", spec.Capacity)
 
 	return spec
 }
@@ -921,6 +924,13 @@ func (m *MachinePoolScope) PatchCAPIMachinePoolObject(ctx context.Context) error
 
 // UpdateCAPIMachinePoolReplicas updates the associated MachinePool replica count.
 func (m *MachinePoolScope) UpdateCAPIMachinePoolReplicas(ctx context.Context, replicas *int32) {
+	logger := log.FromContext(ctx).WithName("MachinePoolScope")
+	if replicas != nil {
+		logger.Info("UpdateCAPIMachinePoolReplicas", "replicas", *replicas)
+	} else {
+		logger.Info("UpdateCAPIMachinePoolReplicas############")
+	}
+
 	m.MachinePool.Spec.Replicas = replicas
 }
 
@@ -940,9 +950,14 @@ func (m *MachinePoolScope) ReconcileReplicas(ctx context.Context, vmss *azure.VM
 		replicas = *m.MachinePool.Spec.Replicas
 	}
 
+	logger := log.FromContext(ctx).WithName("ReconcileReplicas")
+
 	if capacity := int32(vmss.Capacity); capacity != replicas {
+		logger.Info("############## updating")
 		m.UpdateCAPIMachinePoolReplicas(ctx, &capacity)
 	}
+
+	logger.Info("<<<<<<<<", "replicas", replicas, "capacity", vmss.Capacity)
 
 	return nil
 }
