@@ -39,39 +39,42 @@ import (
 )
 
 // SetupAzureMachinePoolWebhookWithManager sets up and registers the webhook with the manager.
-func SetupAzureMachinePoolWebhookWithManager(mgr ctrl.Manager) error {
-	ampw := &azureMachinePoolWebhook{Client: mgr.GetClient()}
+func SetupAzureMachinePoolTemplateWebhookWithManager(mgr ctrl.Manager) error {
+	amptw := &azureMachinePoolTemplateWebhook{Client: mgr.GetClient()}
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&AzureMachinePool{}).
-		WithDefaulter(ampw).
-		WithValidator(ampw).
+		For(&AzureMachinePoolTemplate{}).
+		WithDefaulter(amptw).
+		WithValidator(amptw).
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-infrastructure-cluster-x-k8s-io-v1beta1-azuremachinepool,mutating=true,failurePolicy=fail,groups=infrastructure.cluster.x-k8s.io,resources=azuremachinepools,verbs=create;update,versions=v1beta1,name=default.azuremachinepool.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
+// +kubebuilder:webhook:path=/mutate-infrastructure-cluster-x-k8s-io-v1beta1-azuremachinepooltemplate,mutating=true,failurePolicy=fail,groups=infrastructure.cluster.x-k8s.io,resources=azuremachinepooltemplates,verbs=create;update,versions=v1beta1,name=default.azuremachinepooltemplate.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
-// azureMachinePoolWebhook implements a validating and defaulting webhook for AzureMachinePool.
-type azureMachinePoolWebhook struct {
+// azureMachinePoolTemplateWebhook implements a validating and defaulting webhook for AzureMachinePoolTemplate.
+type azureMachinePoolTemplateWebhook struct {
 	Client client.Client
 }
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (ampw *azureMachinePoolWebhook) Default(ctx context.Context, obj runtime.Object) error {
-	amp, ok := obj.(*AzureMachinePool)
+func (ampw *azureMachinePoolTemplateWebhook) Default(ctx context.Context, obj runtime.Object) error {
+	ampt, ok := obj.(*AzureMachinePoolTemplate)
 	if !ok {
-		return apierrors.NewBadRequest("expected an AzureMachinePool")
+		return apierrors.NewBadRequest("expected an AzureMachinePoolTemplate")
 	}
-	return amp.SetDefaults(ampw.Client)
+	return ampt.SetDefaults(ampw.Client)
 }
 
-// +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-azuremachinepool,mutating=false,failurePolicy=fail,groups=infrastructure.cluster.x-k8s.io,resources=azuremachinepools,versions=v1beta1,name=validation.azuremachinepool.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
+// +kubebuilder:webhook:verbs=create;update,path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-azuremachinepooltemplate,mutating=false,failurePolicy=fail,groups=infrastructure.cluster.x-k8s.io,resources=azuremachinepooltemplates,versions=v1beta1,name=validation.azuremachinepooltemplate.infrastructure.cluster.x-k8s.io,sideEffects=None,admissionReviewVersions=v1;v1beta1
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (ampw *azureMachinePoolWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	amp, ok := obj.(*AzureMachinePool)
+func (ampw *azureMachinePoolTemplateWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	ampt, ok := obj.(*AzureMachinePoolTemplate)
 	if !ok {
-		return nil, apierrors.NewBadRequest("expected an AzureMachinePool")
+		return nil, apierrors.NewBadRequest("expected an AzureMachinePoolTemplate")
 	}
+
+	spec := ampt.Spec.Template.Spec
+
 	// NOTE: AzureMachinePool is behind MachinePool feature gate flag; the webhook
 	// must prevent creating new objects in case the feature flag is disabled.
 	if !feature.Gates.Enabled(capifeature.MachinePool) {
@@ -80,36 +83,36 @@ func (ampw *azureMachinePoolWebhook) ValidateCreate(ctx context.Context, obj run
 			"can be set only if the MachinePool feature flag is enabled",
 		)
 	}
-	return nil, amp.Spec.Validate(nil, ampw.Client)
+	return nil, ampt.Validate(nil, ampw.Client)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (ampw *azureMachinePoolWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	amp, ok := newObj.(*AzureMachinePool)
+func (ampw *azureMachinePoolTemplateWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	ampt, ok := newObj.(*AzureMachinePoolTemplate)
 	if !ok {
-		return nil, apierrors.NewBadRequest("expected an AzureMachinePool")
+		return nil, apierrors.NewBadRequest("expected an AzureMachinePoolTemplate")
 	}
-	return nil, amp.Spec.Validate(oldObj, ampw.Client)
+	return nil, ampt.Validate(oldObj, ampw.Client)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (ampw *azureMachinePoolWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (ampw *azureMachinePoolTemplateWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-// Validate the Azure Machine Pool spec and return an aggregate error.
-func (amps *AzureMachinePoolSpec) Validate(old runtime.Object, client client.Client) error {
+// Validate the Azure Machine Pool and return an aggregate error.
+func (amp *AzureMachinePoolTemplate) Validate(old runtime.Object, client client.Client) error {
 	validators := []func() error{
-		amps.ValidateImage,
-		amps.ValidateTerminateNotificationTimeout,
-		amps.ValidateSSHKey,
-		amps.ValidateUserAssignedIdentity,
-		amps.ValidateDiagnostics,
-		amps.ValidateOrchestrationMode(client),
-		amps.ValidateStrategy(),
-		amps.ValidateSystemAssignedIdentity(old),
-		amps.ValidateSystemAssignedIdentityRole,
-		amps.ValidateNetwork,
+		amp.ValidateImage,
+		amp.ValidateTerminateNotificationTimeout,
+		amp.ValidateSSHKey,
+		amp.ValidateUserAssignedIdentity,
+		amp.ValidateDiagnostics,
+		amp.ValidateOrchestrationMode(client),
+		amp.ValidateStrategy(),
+		amp.ValidateSystemAssignedIdentity(old),
+		amp.ValidateSystemAssignedIdentityRole,
+		amp.ValidateNetwork,
 	}
 
 	var errs []error
@@ -123,17 +126,17 @@ func (amps *AzureMachinePoolSpec) Validate(old runtime.Object, client client.Cli
 }
 
 // ValidateNetwork of an AzureMachinePool.
-func (amps *AzureMachinePoolSpec) ValidateNetwork() error {
-	if (amps.Template.NetworkInterfaces != nil) && len(amps.Template.NetworkInterfaces) > 0 && amps.Template.SubnetName != "" {
+func (amp *AzureMachinePool) ValidateNetwork() error {
+	if (amp.Spec.Template.NetworkInterfaces != nil) && len(amp.Spec.Template.NetworkInterfaces) > 0 && amp.Spec.Template.SubnetName != "" {
 		return errors.New("cannot set both NetworkInterfaces and machine SubnetName")
 	}
 	return nil
 }
 
 // ValidateImage of an AzureMachinePool.
-func (amps *AzureMachinePoolSpec) ValidateImage() error {
-	if amps.Template.Image != nil {
-		image := amps.Template.Image
+func (amp *AzureMachinePool) ValidateImage() error {
+	if amp.Spec.Template.Image != nil {
+		image := amp.Spec.Template.Image
 		if errs := infrav1.ValidateImage(image, field.NewPath("image")); len(errs) > 0 {
 			agg := kerrors.NewAggregate(errs.ToAggregate().Errors())
 			return agg
@@ -144,15 +147,15 @@ func (amps *AzureMachinePoolSpec) ValidateImage() error {
 }
 
 // ValidateTerminateNotificationTimeout termination notification timeout to be between 5 and 15.
-func (amps *AzureMachinePoolSpec) ValidateTerminateNotificationTimeout() error {
-	if amps.Template.TerminateNotificationTimeout == nil {
+func (amp *AzureMachinePool) ValidateTerminateNotificationTimeout() error {
+	if amp.Spec.Template.TerminateNotificationTimeout == nil {
 		return nil
 	}
-	if *amps.Template.TerminateNotificationTimeout < 5 {
+	if *amp.Spec.Template.TerminateNotificationTimeout < 5 {
 		return errors.New("minimum timeout 5 is allowed for TerminateNotificationTimeout")
 	}
 
-	if *amps.Template.TerminateNotificationTimeout > 15 {
+	if *amp.Spec.Template.TerminateNotificationTimeout > 15 {
 		return errors.New("maximum timeout 15 is allowed for TerminateNotificationTimeout")
 	}
 
@@ -160,9 +163,9 @@ func (amps *AzureMachinePoolSpec) ValidateTerminateNotificationTimeout() error {
 }
 
 // ValidateSSHKey validates an SSHKey.
-func (amps *AzureMachinePoolSpec) ValidateSSHKey() error {
-	if amps.Template.SSHPublicKey != "" {
-		sshKey := amps.Template.SSHPublicKey
+func (amp *AzureMachinePool) ValidateSSHKey() error {
+	if amp.Spec.Template.SSHPublicKey != "" {
+		sshKey := amp.Spec.Template.SSHPublicKey
 		if errs := infrav1.ValidateSSHKey(sshKey, field.NewPath("sshKey")); len(errs) > 0 {
 			agg := kerrors.NewAggregate(errs.ToAggregate().Errors())
 			return agg
@@ -173,9 +176,9 @@ func (amps *AzureMachinePoolSpec) ValidateSSHKey() error {
 }
 
 // ValidateUserAssignedIdentity validates the user-assigned identities list.
-func (amps *AzureMachinePoolSpec) ValidateUserAssignedIdentity() error {
+func (amp *AzureMachinePool) ValidateUserAssignedIdentity() error {
 	fldPath := field.NewPath("UserAssignedIdentities")
-	if errs := infrav1.ValidateUserAssignedIdentity(amps.Identity, amps.UserAssignedIdentities, fldPath); len(errs) > 0 {
+	if errs := infrav1.ValidateUserAssignedIdentity(amp.Spec.Identity, amp.Spec.UserAssignedIdentities, fldPath); len(errs) > 0 {
 		return kerrors.NewAggregate(errs.ToAggregate().Errors())
 	}
 
@@ -183,10 +186,10 @@ func (amps *AzureMachinePoolSpec) ValidateUserAssignedIdentity() error {
 }
 
 // ValidateStrategy validates the strategy.
-func (amps *AzureMachinePoolSpec) ValidateStrategy() func() error {
+func (amp *AzureMachinePool) ValidateStrategy() func() error {
 	return func() error {
-		if amps.Strategy.Type == RollingUpdateAzureMachinePoolDeploymentStrategyType && amps.Strategy.RollingUpdate != nil {
-			rollingUpdateStrategy := amps.Strategy.RollingUpdate
+		if amp.Spec.Strategy.Type == RollingUpdateAzureMachinePoolDeploymentStrategyType && amp.Spec.Strategy.RollingUpdate != nil {
+			rollingUpdateStrategy := amp.Spec.Strategy.RollingUpdate
 			maxSurge := rollingUpdateStrategy.MaxSurge
 			maxUnavailable := rollingUpdateStrategy.MaxUnavailable
 			if maxSurge.Type == intstr.Int && maxSurge.IntVal == 0 &&
@@ -200,7 +203,7 @@ func (amps *AzureMachinePoolSpec) ValidateStrategy() func() error {
 }
 
 // ValidateSystemAssignedIdentity validates system-assigned identity role.
-func (amps *AzureMachinePoolSpec) ValidateSystemAssignedIdentity(old runtime.Object) func() error {
+func (amp *AzureMachinePool) ValidateSystemAssignedIdentity(old runtime.Object) func() error {
 	return func() error {
 		var oldRole string
 		if old != nil {
@@ -209,18 +212,18 @@ func (amps *AzureMachinePoolSpec) ValidateSystemAssignedIdentity(old runtime.Obj
 				return fmt.Errorf("unexpected type for old azure machine pool object. Expected: %q, Got: %q",
 					"AzureMachinePool", reflect.TypeOf(old))
 			}
-			if amps.SystemAssignedIdentityRole != nil {
+			if amp.Spec.SystemAssignedIdentityRole != nil {
 				oldRole = oldMachinePool.Spec.SystemAssignedIdentityRole.Name
 			}
 		}
 
 		roleAssignmentName := ""
-		if amps.SystemAssignedIdentityRole != nil {
-			roleAssignmentName = amps.SystemAssignedIdentityRole.Name
+		if amp.Spec.SystemAssignedIdentityRole != nil {
+			roleAssignmentName = amp.Spec.SystemAssignedIdentityRole.Name
 		}
 
 		fldPath := field.NewPath("roleAssignmentName")
-		if errs := infrav1.ValidateSystemAssignedIdentity(amps.Identity, oldRole, roleAssignmentName, fldPath); len(errs) > 0 {
+		if errs := infrav1.ValidateSystemAssignedIdentity(amp.Spec.Identity, oldRole, roleAssignmentName, fldPath); len(errs) > 0 {
 			return kerrors.NewAggregate(errs.ToAggregate().Errors())
 		}
 
@@ -229,21 +232,21 @@ func (amps *AzureMachinePoolSpec) ValidateSystemAssignedIdentity(old runtime.Obj
 }
 
 // ValidateSystemAssignedIdentityRole validates the scope and roleDefinitionID for the system-assigned identity.
-func (amps *AzureMachinePoolSpec) ValidateSystemAssignedIdentityRole() error {
+func (amp *AzureMachinePool) ValidateSystemAssignedIdentityRole() error {
 	var allErrs field.ErrorList
-	if amps.RoleAssignmentName != "" && amps.SystemAssignedIdentityRole != nil && amps.SystemAssignedIdentityRole.Name != "" {
-		allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole"), amps.SystemAssignedIdentityRole.Name, "cannot set both roleAssignmentName and systemAssignedIdentityRole.name"))
+	if amp.Spec.RoleAssignmentName != "" && amp.Spec.SystemAssignedIdentityRole != nil && amp.Spec.SystemAssignedIdentityRole.Name != "" {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole"), amp.Spec.SystemAssignedIdentityRole.Name, "cannot set both roleAssignmentName and systemAssignedIdentityRole.name"))
 	}
-	if amps.Identity == infrav1.VMIdentitySystemAssigned {
-		if amps.SystemAssignedIdentityRole.DefinitionID == "" {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole", "DefinitionID"), amps.SystemAssignedIdentityRole.DefinitionID, "the roleDefinitionID field cannot be empty"))
+	if amp.Spec.Identity == infrav1.VMIdentitySystemAssigned {
+		if amp.Spec.SystemAssignedIdentityRole.DefinitionID == "" {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole", "DefinitionID"), amp.Spec.SystemAssignedIdentityRole.DefinitionID, "the roleDefinitionID field cannot be empty"))
 		}
-		if amps.SystemAssignedIdentityRole.Scope == "" {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole", "Scope"), amps.SystemAssignedIdentityRole.Scope, "the scope field cannot be empty"))
+		if amp.Spec.SystemAssignedIdentityRole.Scope == "" {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole", "Scope"), amp.Spec.SystemAssignedIdentityRole.Scope, "the scope field cannot be empty"))
 		}
 	}
-	if amps.Identity != infrav1.VMIdentitySystemAssigned && amps.SystemAssignedIdentityRole != nil {
-		allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole"), amps.SystemAssignedIdentityRole, "systemAssignedIdentityRole can only be set when identity is set to 'SystemAssigned'"))
+	if amp.Spec.Identity != infrav1.VMIdentitySystemAssigned && amp.Spec.SystemAssignedIdentityRole != nil {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("systemAssignedIdentityRole"), amp.Spec.SystemAssignedIdentityRole, "systemAssignedIdentityRole can only be set when identity is set to 'SystemAssigned'"))
 	}
 
 	if len(allErrs) > 0 {
@@ -254,11 +257,11 @@ func (amps *AzureMachinePoolSpec) ValidateSystemAssignedIdentityRole() error {
 }
 
 // ValidateDiagnostics validates the Diagnostic spec.
-func (amps *AzureMachinePoolSpec) ValidateDiagnostics() error {
+func (amp *AzureMachinePool) ValidateDiagnostics() error {
 	var allErrs field.ErrorList
 	fieldPath := field.NewPath("diagnostics")
 
-	diagnostics := amps.Template.Diagnostics
+	diagnostics := amp.Spec.Template.Diagnostics
 
 	if diagnostics != nil && diagnostics.Boot != nil {
 		switch diagnostics.Boot.StorageAccountType {
@@ -295,10 +298,10 @@ func (amps *AzureMachinePoolSpec) ValidateDiagnostics() error {
 }
 
 // ValidateOrchestrationMode validates requirements for the VMSS orchestration mode.
-func (amps *AzureMachinePoolSpec) ValidateOrchestrationMode(c client.Client) func() error {
+func (amp *AzureMachinePool) ValidateOrchestrationMode(c client.Client) func() error {
 	return func() error {
 		// Only Flexible orchestration mode requires validation.
-		if amps.OrchestrationMode == infrav1.OrchestrationModeType(armcompute.OrchestrationModeFlexible) {
+		if amp.Spec.OrchestrationMode == infrav1.OrchestrationModeType(armcompute.OrchestrationModeFlexible) {
 			parent, err := azureutil.FindParentMachinePoolWithRetry(amp.Name, c, 5)
 			if err != nil {
 				return errors.Wrap(err, "failed to find parent MachinePool")
