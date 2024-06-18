@@ -19,6 +19,8 @@ package v1beta1
 import (
 	"encoding/base64"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
 	"github.com/google/uuid"
@@ -247,6 +249,26 @@ func ValidateOSDisk(osDisk OSDisk, fieldPath *field.Path) field.ErrorList {
 			osDisk.ManagedDisk.DiskEncryptionSet.ID,
 			"diskEncryptionSet is not supported when diffDiskSettings.option is 'Local'",
 		))
+	}
+	if osDisk.DiffDiskSettings != nil && osDisk.DiffDiskSettings.Placement != nil {
+		if osDisk.DiffDiskSettings.Option != string(armcompute.DiffDiskOptionsLocal) {
+			allErrs = append(allErrs, field.Invalid(
+				fieldPath.Child("diffDiskSettings"),
+				osDisk.DiffDiskSettings,
+				"placement is only supported when diffDiskSettings.option is 'Local'",
+			))
+		}
+		if !slices.Contains(PossibleDiffDiskPlacementValues(), *osDisk.DiffDiskSettings.Placement) {
+			options := make([]string, len(PossibleDiffDiskPlacementValues()))
+			for i, value := range PossibleDiffDiskPlacementValues() {
+				options[i] = string(value)
+			}
+			allErrs = append(allErrs, field.Invalid(
+				fieldPath.Child("diffDiskSettings").Child("placement"),
+				osDisk.DiffDiskSettings.Placement,
+				"placement must be one of "+strings.Join(options, ","),
+			))
+		}
 	}
 
 	return allErrs

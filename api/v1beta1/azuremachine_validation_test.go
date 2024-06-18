@@ -110,6 +110,53 @@ func TestAzureMachine_ValidateOSDisk(t *testing.T) {
 			},
 		},
 		{
+			name:    "valid resourceDisk placement spec with option local",
+			wantErr: false,
+			osDisk: OSDisk{
+				DiskSizeGB:  ptr.To[int32](30),
+				CachingType: "None",
+				OSType:      "blah",
+				DiffDiskSettings: &DiffDiskSettings{
+					Option:    string(armcompute.DiffDiskOptionsLocal),
+					Placement: ptr.To(DiffDiskPlacementResourceDisk),
+				},
+				ManagedDisk: &ManagedDiskParameters{
+					StorageAccountType: "Standard_LRS",
+				},
+			},
+		},
+		{
+			name:    "valid resourceDisk placement spec requires option local",
+			wantErr: true,
+			osDisk: OSDisk{
+				DiskSizeGB:  ptr.To[int32](30),
+				CachingType: "None",
+				OSType:      "blah",
+				DiffDiskSettings: &DiffDiskSettings{
+					Placement: ptr.To(DiffDiskPlacementResourceDisk),
+				},
+				ManagedDisk: &ManagedDiskParameters{
+					StorageAccountType: "Standard_LRS",
+				},
+			},
+		},
+		{
+			name:    "invalid resourceDisk placement spec",
+			wantErr: true,
+			osDisk: OSDisk{
+				DiskSizeGB:  ptr.To[int32](30),
+				CachingType: "None",
+				OSType:      "blah",
+				DiffDiskSettings: &DiffDiskSettings{
+					Option:    string(armcompute.DiffDiskOptionsLocal),
+					Placement: ptr.To(DiffDiskPlacement("invalidDisk")),
+				},
+				ManagedDisk: &ManagedDiskParameters{
+					StorageAccountType: "Standard_LRS",
+				},
+			},
+		},
+		{
 			name:    "byoc encryption with ephemeral os disk spec",
 			wantErr: true,
 			osDisk: OSDisk{
