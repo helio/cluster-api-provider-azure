@@ -495,11 +495,6 @@ func (m *MachinePoolScope) applyAzureMachinePoolMachines(ctx context.Context) er
 		return errors.Wrap(err, "failed selecting AzureMachinePoolMachine(s) to delete")
 	}
 
-	if val, ok := m.MachinePool.Annotations["cluster.x-k8s.io/capi-autoscaler"]; len(toDelete) > 0 && ok && val == "true" {
-		log.Info("exiting early due to capi-autoscaler handling scale down", "wouldDelete", len(toDelete))
-		return nil
-	}
-
 	// Delete MachinePool Machines as a part of scaling down
 	for i := range toDelete {
 		ampm := toDelete[i]
