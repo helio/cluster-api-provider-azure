@@ -137,6 +137,8 @@ func (rollingUpdateStrategy rollingUpdateStrategy) SelectMachinesToDelete(ctx co
 				return orderRandom
 			}
 		}()
+		log                        = ctrl.LoggerFrom(ctx).V(4)
+		deleteAnnotatedMachines    = order(getDeleteAnnotatedMachines(machinesByProviderID))
 		failedMachines             = order(getFailedMachines(machinesByProviderID))
 		deletingMachines           = order(getDeletingMachines(machinesByProviderID))
 		readyMachines              = order(getReadyMachines(machinesByProviderID))
@@ -157,9 +159,16 @@ func (rollingUpdateStrategy rollingUpdateStrategy) SelectMachinesToDelete(ctx co
 		"maxUnavailable", maxUnavailable,
 		"disruptionBudget", disruptionBudget,
 		"machinesWithoutTheLatestModel", len(machinesWithoutLatestModel),
+		"deleteAnnotatedMachines", len(deleteAnnotatedMachines),
 		"failedMachines", len(failedMachines),
 		"deletingMachines", len(deletingMachines),
 	)
+
+	// if we have machines annotated with delete machine, remove them
+	if len(deleteAnnotatedMachines) > 0 {
+		log.Info("delete annotated machines", "desiredReplicaCount", desiredReplicaCount, "maxUnavailable", maxUnavailable, "deleteAnnotatedMachines", getProviderIDs(deleteAnnotatedMachines))
+		return deleteAnnotatedMachines, nil
+	}
 
 	// if we have failed or deleting machines, remove them
 	if len(failedMachines) > 0 || len(deletingMachines) > 0 {
