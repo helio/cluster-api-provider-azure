@@ -405,8 +405,24 @@ func (m *MachinePoolScope) applyAzureMachinePoolMachines(ctx context.Context) er
 	}
 
 	existingMachinesByProviderID := make(map[string]infrav1exp.AzureMachinePoolMachine, len(ampms))
-	for _, machine := range ampms {
-		existingMachinesByProviderID[machine.Spec.ProviderID] = machine
+	for _, ampm := range ampms {
+		existingMachinesByProviderID[ampm.Spec.ProviderID] = ampm
+
+		// propagate Machine delete annotation from owner machine to AzureMachinePoolMachine
+		// this ensures setting a deleteMachine annotation on the Machine has an effect on the AzureMachinePoolMachine
+		// and the deployment strategy.
+		machine, err := util.GetOwnerMachine(ctx, m.client, ampm.ObjectMeta)
+		if err != nil {
+			// TODO(mw): which verbosity? info or error?
+			log.V(4).Info("failed to get owner machine", "machine", ampm.Spec.ProviderID)
+			continue
+		}
+		if machine != nil && machine.Annotations != nil {
+			if _, hasDeleteAnnotation := machine.Annotations[clusterv1.DeleteMachineAnnotation]; hasDeleteAnnotation {
+				log.V(4).Info("propagating DeleteMachineAnnotation", "machine", ampm.Spec.ProviderID)
+				existingMachinesByProviderID[ampm.Spec.ProviderID].Annotations[clusterv1.DeleteMachineAnnotation] = machine.Annotations[clusterv1.DeleteMachineAnnotation]
+			}
+		}
 	}
 
 	// determine which machines need to be created to reflect the current state in Azure
@@ -465,11 +481,6 @@ func (m *MachinePoolScope) applyAzureMachinePoolMachines(ctx context.Context) er
 	toDelete, err := deleteSelector.SelectMachinesToDelete(ctx, m.DesiredReplicas(), existingMachinesByProviderID)
 	if err != nil {
 		return errors.Wrap(err, "failed selecting AzureMachinePoolMachine(s) to delete")
-	}
-
-	if val, ok := m.MachinePool.Annotations["cluster.x-k8s.io/capi-autoscaler"]; len(toDelete) > 0 && ok && val == "true" {
-		log.Info("exiting early due to capi-autoscaler handling scale down", "wouldDelete", len(toDelete))
-		return nil
 	}
 
 	// Delete MachinePool Machines as a part of scaling down
