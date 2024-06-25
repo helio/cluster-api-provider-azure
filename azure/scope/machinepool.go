@@ -420,7 +420,12 @@ func (m *MachinePoolScope) applyAzureMachinePoolMachines(ctx context.Context) er
 		if machine != nil && machine.Annotations != nil {
 			if _, hasDeleteAnnotation := machine.Annotations[clusterv1.DeleteMachineAnnotation]; hasDeleteAnnotation {
 				log.V(4).Info("propagating DeleteMachineAnnotation", "machine", ampm.Spec.ProviderID)
-				existingMachinesByProviderID[ampm.Spec.ProviderID].Annotations[clusterv1.DeleteMachineAnnotation] = machine.Annotations[clusterv1.DeleteMachineAnnotation]
+				if ampm.Annotations == nil {
+					ampm.Annotations = make(map[string]string)
+				}
+				ampm.Annotations[clusterv1.DeleteMachineAnnotation] = machine.Annotations[clusterv1.DeleteMachineAnnotation]
+				// reassign
+				existingMachinesByProviderID[ampm.Spec.ProviderID] = ampm
 			}
 		}
 	}
