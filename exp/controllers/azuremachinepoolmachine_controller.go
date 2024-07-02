@@ -329,7 +329,6 @@ func (ampmr *AzureMachinePoolMachineController) reconcileDelete(ctx context.Cont
 		controllerutil.RemoveFinalizer(machineScope.AzureMachinePoolMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
 		return reconcile.Result{}, nil
 	}
-
 	if !machineScope.AzureMachinePool.ObjectMeta.DeletionTimestamp.IsZero() {
 		log.Info("Skipping VMSS VM deletion as VMSS delete will delete individual instances")
 
