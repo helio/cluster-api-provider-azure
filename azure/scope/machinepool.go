@@ -406,28 +406,30 @@ func (m *MachinePoolScope) applyAzureMachinePoolMachines(ctx context.Context) er
 
 	existingMachinesByProviderID := make(map[string]infrav1exp.AzureMachinePoolMachine, len(ampms))
 	for _, ampm := range ampms {
-		existingMachinesByProviderID[ampm.Spec.ProviderID] = ampm
-
-		// propagate Machine delete annotation from owner machine to AzureMachinePoolMachine
-		// this ensures setting a deleteMachine annotation on the Machine has an effect on the AzureMachinePoolMachine
-		// and the deployment strategy.
 		machine, err := util.GetOwnerMachine(ctx, m.client, ampm.ObjectMeta)
 		if err != nil {
-			// TODO(mw): which verbosity? info or error?
-			log.V(4).Info("failed to get owner machine", "machine", ampm.Spec.ProviderID)
-			continue
+			return fmt.Errorf("failed to find owner machine for %s/%s: %w", ampm.Namespace, ampm.Name, err)
 		}
-		if machine != nil && machine.Annotations != nil {
-			if _, hasDeleteAnnotation := machine.Annotations[clusterv1.DeleteMachineAnnotation]; hasDeleteAnnotation {
-				log.V(4).Info("propagating DeleteMachineAnnotation", "machine", ampm.Spec.ProviderID)
-				if ampm.Annotations == nil {
-					ampm.Annotations = make(map[string]string)
+
+		if _, ampmHasDeleteAnnotation := ampm.Annotations[clusterv1.DeleteMachineAnnotation]; !ampmHasDeleteAnnotation {
+			// fetch Machine delete annotation from owner machine to AzureMachinePoolMachine.
+			// This ensures setting a deleteMachine annotation on the Machine has an effect on the AzureMachinePoolMachine
+			// and the deployment strategy, in case the automatic propagation of the annotation from Machine to AzureMachinePoolMachine
+			// hasn't been done yet.
+			if machine != nil && machine.Annotations != nil {
+				if _, hasDeleteAnnotation := machine.Annotations[clusterv1.DeleteMachineAnnotation]; hasDeleteAnnotation {
+					log.V(4).Info("fetched DeleteMachineAnnotation", "machine", ampm.Spec.ProviderID)
+					if ampm.Annotations == nil {
+						ampm.Annotations = make(map[string]string)
+					}
+					ampm.Annotations[clusterv1.DeleteMachineAnnotation] = machine.Annotations[clusterv1.DeleteMachineAnnotation]
 				}
-				ampm.Annotations[clusterv1.DeleteMachineAnnotation] = machine.Annotations[clusterv1.DeleteMachineAnnotation]
-				// reassign
-				existingMachinesByProviderID[ampm.Spec.ProviderID] = ampm
 			}
+		} else {
+			log.V(4).Info("DeleteMachineAnnotation already set")
 		}
+
+		existingMachinesByProviderID[ampm.Spec.ProviderID] = ampm
 	}
 
 	// determine which machines need to be created to reflect the current state in Azure
