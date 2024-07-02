@@ -216,6 +216,10 @@ func (ampmr *AzureMachinePoolMachineController) Reconcile(ctx context.Context, r
 
 	if machine != nil {
 		logger = logger.WithValues("machine", machine.Name)
+	} else if !azureMachinePool.ObjectMeta.DeletionTimestamp.IsZero() {
+		logger.Info("AzureMachinePool is being deleted, removing finalizer")
+		controllerutil.RemoveFinalizer(azureMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
+		return reconcile.Result{}, nil
 	} else {
 		logger.Info("Waiting for Machine Controller to set OwnerRef on AzureMachinePoolMachine")
 		return reconcile.Result{}, nil
@@ -331,7 +335,6 @@ func (ampmr *AzureMachinePoolMachineController) reconcileDelete(ctx context.Cont
 		controllerutil.RemoveFinalizer(machineScope.AzureMachinePoolMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
 		return reconcile.Result{}, nil
 	}
-
 	if !machineScope.AzureMachinePool.ObjectMeta.DeletionTimestamp.IsZero() {
 		log.Info("Skipping VMSS VM deletion as VMSS delete will delete individual instances")
 
