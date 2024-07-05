@@ -79,7 +79,7 @@ func (s *Service) Name() string {
 
 // Reconcile idempotently gets, creates, and updates a scale set.
 func (s *Service) Reconcile(ctx context.Context) (retErr error) {
-	ctx, _, done := tele.StartSpanWithLogger(ctx, "scalesets.Service.Reconcile")
+	ctx, log, done := tele.StartSpanWithLogger(ctx, "scalesets.Service.Reconcile")
 	defer done()
 
 	ctx, cancel := context.WithTimeout(ctx, s.Scope.DefaultedAzureServiceReconcileTimeout())
@@ -138,12 +138,17 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 				break
 			}
 		}
+
+		log = log.WithValues("rg", spec.ResourceGroupName(), "resourceName", spec.ResourceName())
 		if !azLatestModelApplied {
+			log.V(3).Info("latest model not applied")
+
 			resourceName := spec.ResourceName()
 			futureType := infrav1.PostFuture
 			// Check for an ongoing long-running operation.
 			resumeToken := ""
 			if future := s.Scope.GetLongRunningOperationState(resourceName, serviceName, futureType); future != nil {
+				log.V(4).Info("found future")
 				t, err := converters.FutureToResumeToken(*future)
 				if err != nil {
 					s.Scope.DeleteLongRunningOperationState(resourceName, serviceName, futureType)
@@ -156,6 +161,8 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 				InstanceIDs: []*string{&target},
 			}, resumeToken)
 			if poller != nil && azure.IsContextDeadlineExceededOrCanceledError(err) {
+				log.Info("context deadline exceeded or canceled for long running op", "err", err)
+
 				future, err := converters.PollerToFuture(poller, futureType, serviceName, resourceName, spec.ResourceGroupName())
 				if err != nil {
 					return errors.Wrap(err, "failed to convert poller to future")
@@ -163,10 +170,13 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 				s.Scope.SetLongRunningOperationState(future)
 				return azure.WithTransientError(azure.NewOperationNotDoneError(future), s.Scope.DefaultedReconcilerRequeue())
 			}
+			log.Info("latest model update operation done")
 
 			// Once the operation is done, delete the long-running operation state. Even if the operation ended with
 			// an error, clear out any lingering state to try the operation again.
 			s.Scope.DeleteLongRunningOperationState(resourceName, serviceName, futureType)
+		} else {
+			log.V(3).Info("latest model applied, not updating anything")
 		}
 	}
 
