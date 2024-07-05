@@ -104,6 +104,7 @@ type (
 		State              infrav1.ProvisioningState     `json:"vmState,omitempty"`
 		BootstrappingState infrav1.ProvisioningState     `json:"bootstrappingState,omitempty"`
 		OrchestrationMode  infrav1.OrchestrationModeType `json:"orchestrationMode,omitempty"`
+		LatestModelApplied bool                          `json:"latestModelApplied,omitempty"`
 	}
 
 	// VMSS defines a virtual machine scale set.

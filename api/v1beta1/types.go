@@ -63,6 +63,8 @@ const (
 	PatchFuture string = "PATCH"
 	// PutFuture is a future that was derived from a PUT request.
 	PutFuture string = "PUT"
+	// PostFuture is a future that was derived from a POST request.
+	PostFuture string = "POST"
 	// DeleteFuture is a future that was derived from a DELETE request.
 	DeleteFuture string = "DELETE"
 )
