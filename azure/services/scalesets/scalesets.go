@@ -130,6 +130,44 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 		}
 		s.Scope.SetProviderID(providerID)
 		s.Scope.SetVMSSState(&fetchedVMSS)
+
+		azLatestModelApplied := true
+		for _, instance := range scaleSetSpec.VMSSInstances {
+			if instance.Properties.LatestModelApplied != nil && !*instance.Properties.LatestModelApplied {
+				azLatestModelApplied = false
+				break
+			}
+		}
+		if !azLatestModelApplied {
+			resourceName := spec.ResourceName()
+			futureType := infrav1.PostFuture
+			// Check for an ongoing long-running operation.
+			resumeToken := ""
+			if future := s.Scope.GetLongRunningOperationState(resourceName, serviceName, futureType); future != nil {
+				t, err := converters.FutureToResumeToken(*future)
+				if err != nil {
+					s.Scope.DeleteLongRunningOperationState(resourceName, serviceName, futureType)
+					return errors.Wrap(err, "could not decode future data, resetting long-running operation state")
+				}
+				resumeToken = t
+			}
+			target := "*"
+			poller, err := s.Client.BeginUpdateInstances(ctx, spec, armcompute.VirtualMachineScaleSetVMInstanceRequiredIDs{
+				InstanceIDs: []*string{&target},
+			}, resumeToken)
+			if poller != nil && azure.IsContextDeadlineExceededOrCanceledError(err) {
+				future, err := converters.PollerToFuture(poller, futureType, serviceName, resourceName, spec.ResourceGroupName())
+				if err != nil {
+					return errors.Wrap(err, "failed to convert poller to future")
+				}
+				s.Scope.SetLongRunningOperationState(future)
+				return azure.WithTransientError(azure.NewOperationNotDoneError(future), s.Scope.DefaultedReconcilerRequeue())
+			}
+
+			// Once the operation is done, delete the long-running operation state. Even if the operation ended with
+			// an error, clear out any lingering state to try the operation again.
+			s.Scope.DeleteLongRunningOperationState(resourceName, serviceName, futureType)
+		}
 	}
 
 	return err

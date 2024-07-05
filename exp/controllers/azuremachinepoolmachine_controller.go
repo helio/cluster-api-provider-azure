@@ -332,6 +332,7 @@ func (ampmr *AzureMachinePoolMachineController) reconcileDelete(ctx context.Cont
 	if !machineScope.AzureMachinePool.ObjectMeta.DeletionTimestamp.IsZero() {
 		log.Info("Skipping VMSS VM deletion as VMSS delete will delete individual instances")
 
+		// FIXME(mw): check if VMSS VM is already deleted to avoid recreating AMPM
 		controllerutil.RemoveFinalizer(machineScope.AzureMachinePoolMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
 		return reconcile.Result{}, nil
 	}
