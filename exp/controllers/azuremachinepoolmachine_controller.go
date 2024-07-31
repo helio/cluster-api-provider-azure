@@ -337,6 +337,12 @@ func (ampmr *AzureMachinePoolMachineController) reconcileDelete(ctx context.Cont
 		return reconcile.Result{}, nil
 	}
 
+	if machineScope.ProvisioningState() == infrav1.Deleting || machineScope.ProvisioningState() == infrav1.Deleted {
+		log.V(2).Info(fmt.Sprintf("Skipping VMSS VM deletion as VMSS VM is already %s", machineScope.ProvisioningState()))
+		controllerutil.RemoveFinalizer(machineScope.AzureMachinePoolMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
+		return reconcile.Result{}, nil
+	}
+
 	log.Info("Deleting AzureMachinePoolMachine")
 
 	// deleting a single machine
