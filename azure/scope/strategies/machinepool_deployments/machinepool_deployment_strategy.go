@@ -117,15 +117,6 @@ func (rollingUpdateStrategy rollingUpdateStrategy) SelectMachinesToDelete(ctx co
 		return nil, err
 	}
 
-	log := ctrl.LoggerFrom(ctx).V(4)
-
-	// first check if there are any machines with the delete annotations and in this case, only delete those. This allows CAPZ to work with autoscaler.
-	deleteAnnotatedMachines := getDeleteAnnotatedMachines(machinesByProviderID)
-	if len(deleteAnnotatedMachines) > 0 {
-		log.Info("delete annotated machines", "desiredReplicaCount", desiredReplicaCount, "maxUnavailable", maxUnavailable, "deleteAnnotatedMachines", getProviderIDs(deleteAnnotatedMachines))
-		return deleteAnnotatedMachines, nil
-	}
-
 	var (
 		order = func() func(machines []infrav1exp.AzureMachinePoolMachine) []infrav1exp.AzureMachinePoolMachine {
 			switch rollingUpdateStrategy.DeletePolicy {
