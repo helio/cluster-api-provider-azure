@@ -17,8 +17,11 @@ limitations under the License.
 package azure
 
 import (
+	"context"
 	"reflect"
 	"strings"
+
+	"sigs.k8s.io/cluster-api-provider-azure/util/tele"
 
 	"github.com/google/go-cmp/cmp"
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
@@ -123,11 +126,24 @@ type (
 )
 
 // HasModelChanges returns true if the spec fields which will mutate the Azure VMSS model are different.
-func (vmss VMSS) HasModelChanges(other VMSS) bool {
-	equal := cmp.Equal(vmss.Image, other.Image) &&
-		cmp.Equal(vmss.Identity, other.Identity) &&
-		cmp.Equal(vmss.Zones, other.Zones) &&
-		cmp.Equal(vmss.Sku, other.Sku)
+func (vmss VMSS) HasModelChanges(ctx context.Context, other VMSS) bool {
+	ctx, log, done := tele.StartSpanWithLogger(ctx, "vmss.HasModelChanges")
+	defer done()
+
+	imgEqual := cmp.Equal(vmss.Image, other.Image)
+	identityEqual := cmp.Equal(vmss.Identity, other.Identity)
+	zonesEqual := cmp.Equal(vmss.Zones, other.Zones)
+	skuEqual := cmp.Equal(vmss.Sku, other.Sku)
+
+	equal := imgEqual &&
+		identityEqual &&
+		zonesEqual &&
+		skuEqual
+
+	if !equal {
+		log.Info("VMSS has changed", "vmssName", vmss.Name, "imgEqual", imgEqual, "identityEqual", identityEqual, "zonesEqual", zonesEqual, "skuEqual", skuEqual)
+	}
+
 	return !equal
 }
 
