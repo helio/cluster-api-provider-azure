@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
 	"github.com/pkg/errors"
 	azprovider "sigs.k8s.io/cloud-provider-azure/pkg/provider"
@@ -96,7 +98,7 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 		return errors.Errorf("%T is not of type ScaleSetSpec", spec)
 	}
 
-	_, err := s.Client.Get(ctx, spec)
+	existing, err := s.Client.Get(ctx, spec)
 	if err == nil {
 		// We can only get the existing instances if the VMSS already exists
 		scaleSetSpec.VMSSInstances, err = s.Client.ListInstances(ctx, spec.ResourceGroupName(), spec.ResourceName())
@@ -116,6 +118,17 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 		vmss, ok := result.(armcompute.VirtualMachineScaleSet)
 		if !ok {
 			return errors.Errorf("%T is not an armcompute.VirtualMachineScaleSet", result)
+		}
+
+		if existing != nil {
+			if existingVmss, ok := existing.(armcompute.VirtualMachineScaleSet); ok {
+				vmssEqual := cmp.Equal(vmss, existingVmss)
+				if !vmssEqual {
+					log.Info("updated VMSS", "diff", cmp.Diff(existingVmss, vmss))
+				} else {
+					log.Info("VMSS equal, probably not updated?")
+				}
+			}
 		}
 
 		fetchedVMSS := converters.SDKToVMSS(vmss, scaleSetSpec.VMSSInstances)
