@@ -154,6 +154,10 @@ func SDKToVMSSVM(sdkInstance armcompute.VirtualMachineScaleSetVM) *azure.VMSSVM 
 		instance.AvailabilityZone = *sdkInstance.Zones[0]
 	}
 
+	if sdkInstance.Properties != nil && sdkInstance.Properties.LatestModelApplied != nil {
+		instance.LatestModelApplied = *sdkInstance.Properties.LatestModelApplied
+	}
+
 	return &instance
 }
 

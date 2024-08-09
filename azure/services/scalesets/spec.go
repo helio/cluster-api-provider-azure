@@ -92,6 +92,9 @@ func (s *ScaleSetSpec) OwnerResourceName() string {
 }
 
 func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interface{}) (parameters interface{}, err error) {
+	ctx, log, done := tele.StartSpanWithLogger(ctx, "scalesets.ScaleSetSpec.existingParameters")
+	defer done()
+
 	existingVMSS, ok := existing.(armcompute.VirtualMachineScaleSet)
 	if !ok {
 		return nil, errors.Errorf("%T is not an armcompute.VirtualMachineScaleSet", existing)
@@ -112,7 +115,7 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 	vmss.Properties.VirtualMachineProfile.NetworkProfile = nil
 	vmss.ID = existingVMSS.ID
 
-	hasModelChanges := hasModelModifyingDifferences(&existingInfraVMSS, vmss)
+	hasModelChanges := hasModelModifyingDifferences(ctx, &existingInfraVMSS, vmss)
 	isFlex := s.OrchestrationMode == infrav1.FlexibleOrchestrationMode
 	updated := true
 	if !isFlex {
@@ -130,6 +133,14 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 		// up to date, nothing to do
 		return nil, nil
 	}
+
+	log.Info("updating VMSS",
+		"name", s.Name,
+		"capacity", vmss.SKU.Capacity,
+		"existingCapacity", existingInfraVMSS.Capacity,
+		"hasModelChanges", hasModelChanges,
+		"shouldPatchCustomData", s.ShouldPatchCustomData,
+	)
 
 	return vmss, nil
 }
@@ -280,9 +291,9 @@ func (s *ScaleSetSpec) Parameters(ctx context.Context, existing interface{}) (pa
 	return vmss, nil
 }
 
-func hasModelModifyingDifferences(infraVMSS *azure.VMSS, vmss armcompute.VirtualMachineScaleSet) bool {
+func hasModelModifyingDifferences(ctx context.Context, infraVMSS *azure.VMSS, vmss armcompute.VirtualMachineScaleSet) bool {
 	other := converters.SDKToVMSS(vmss, []armcompute.VirtualMachineScaleSetVM{})
-	return infraVMSS.HasModelChanges(other)
+	return infraVMSS.HasModelChanges(ctx, other)
 }
 
 func (s *ScaleSetSpec) generateExtensions(ctx context.Context) ([]armcompute.VirtualMachineScaleSetExtension, error) {

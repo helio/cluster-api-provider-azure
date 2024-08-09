@@ -58,6 +58,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// BeginUpdateInstances mocks base method.
+func (m *MockClient) BeginUpdateInstances(ctx context.Context, spec azure.ResourceSpecGetter, vmInstanceIDs armcompute.VirtualMachineScaleSetVMInstanceRequiredIDs, resumeToken string) (*runtime.Poller[armcompute.VirtualMachineScaleSetsClientUpdateInstancesResponse], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeginUpdateInstances", ctx, spec, vmInstanceIDs, resumeToken)
+	ret0, _ := ret[0].(*runtime.Poller[armcompute.VirtualMachineScaleSetsClientUpdateInstancesResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BeginUpdateInstances indicates an expected call of BeginUpdateInstances.
+func (mr *MockClientMockRecorder) BeginUpdateInstances(ctx, spec, vmInstanceIDs, resumeToken any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeginUpdateInstances", reflect.TypeOf((*MockClient)(nil).BeginUpdateInstances), ctx, spec, vmInstanceIDs, resumeToken)
+}
+
 // CreateOrUpdateAsync mocks base method.
 func (m *MockClient) CreateOrUpdateAsync(ctx context.Context, spec azure.ResourceSpecGetter, resumeToken string, parameters any) (any, *runtime.Poller[armcompute.VirtualMachineScaleSetsClientCreateOrUpdateResponse], error) {
 	m.ctrl.T.Helper()
