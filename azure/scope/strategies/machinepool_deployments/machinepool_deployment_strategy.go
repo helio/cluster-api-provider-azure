@@ -128,7 +128,7 @@ func (rollingUpdateStrategy rollingUpdateStrategy) SelectMachinesToDelete(ctx co
 				return orderRandom
 			}
 		}()
-		log                        = ctrl.LoggerFrom(ctx).V(2)
+		log                        = ctrl.LoggerFrom(ctx).V(2).WithValues("method", "selectMachinesToDelete")
 		deleteAnnotatedMachines    = order(getDeleteAnnotatedMachines(machinesByProviderID))
 		failedMachines             = order(getFailedMachines(machinesByProviderID))
 		deletingMachines           = order(getDeletingMachines(machinesByProviderID))
