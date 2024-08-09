@@ -92,6 +92,9 @@ func (s *ScaleSetSpec) OwnerResourceName() string {
 }
 
 func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interface{}) (parameters interface{}, err error) {
+	ctx, log, done := tele.StartSpanWithLogger(ctx, "scalesets.ScaleSetSpec.existingParameters")
+	defer done()
+
 	existingVMSS, ok := existing.(armcompute.VirtualMachineScaleSet)
 	if !ok {
 		return nil, errors.Errorf("%T is not an armcompute.VirtualMachineScaleSet", existing)
@@ -130,6 +133,14 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 		// up to date, nothing to do
 		return nil, nil
 	}
+
+	log.Info("updating VMSS",
+		"name", s.Name,
+		"capacity", vmss.SKU.Capacity,
+		"existingCapacity", existingInfraVMSS.Capacity,
+		"hasModelChanges", hasModelChanges,
+		"shouldPatchCustomData", s.ShouldPatchCustomData,
+	)
 
 	return vmss, nil
 }
