@@ -2131,6 +2131,101 @@ func (mr *MockResourceSpecGetterMockRecorder) ResourceName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResourceName", reflect.TypeOf((*MockResourceSpecGetter)(nil).ResourceName))
 }
 
+// MockResourceSpecGetterWithUpdateParameters is a mock of ResourceSpecGetterWithUpdateParameters interface.
+type MockResourceSpecGetterWithUpdateParameters struct {
+	ctrl     *gomock.Controller
+	recorder *MockResourceSpecGetterWithUpdateParametersMockRecorder
+}
+
+// MockResourceSpecGetterWithUpdateParametersMockRecorder is the mock recorder for MockResourceSpecGetterWithUpdateParameters.
+type MockResourceSpecGetterWithUpdateParametersMockRecorder struct {
+	mock *MockResourceSpecGetterWithUpdateParameters
+}
+
+// NewMockResourceSpecGetterWithUpdateParameters creates a new mock instance.
+func NewMockResourceSpecGetterWithUpdateParameters(ctrl *gomock.Controller) *MockResourceSpecGetterWithUpdateParameters {
+	mock := &MockResourceSpecGetterWithUpdateParameters{ctrl: ctrl}
+	mock.recorder = &MockResourceSpecGetterWithUpdateParametersMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockResourceSpecGetterWithUpdateParameters) EXPECT() *MockResourceSpecGetterWithUpdateParametersMockRecorder {
+	return m.recorder
+}
+
+// OwnerResourceName mocks base method.
+func (m *MockResourceSpecGetterWithUpdateParameters) OwnerResourceName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OwnerResourceName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// OwnerResourceName indicates an expected call of OwnerResourceName.
+func (mr *MockResourceSpecGetterWithUpdateParametersMockRecorder) OwnerResourceName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OwnerResourceName", reflect.TypeOf((*MockResourceSpecGetterWithUpdateParameters)(nil).OwnerResourceName))
+}
+
+// Parameters mocks base method.
+func (m *MockResourceSpecGetterWithUpdateParameters) Parameters(ctx context.Context, existing any) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Parameters", ctx, existing)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Parameters indicates an expected call of Parameters.
+func (mr *MockResourceSpecGetterWithUpdateParametersMockRecorder) Parameters(ctx, existing any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Parameters", reflect.TypeOf((*MockResourceSpecGetterWithUpdateParameters)(nil).Parameters), ctx, existing)
+}
+
+// ParametersForUpdate mocks base method.
+func (m *MockResourceSpecGetterWithUpdateParameters) ParametersForUpdate(ctx context.Context, existing any) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ParametersForUpdate", ctx, existing)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ParametersForUpdate indicates an expected call of ParametersForUpdate.
+func (mr *MockResourceSpecGetterWithUpdateParametersMockRecorder) ParametersForUpdate(ctx, existing any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParametersForUpdate", reflect.TypeOf((*MockResourceSpecGetterWithUpdateParameters)(nil).ParametersForUpdate), ctx, existing)
+}
+
+// ResourceGroupName mocks base method.
+func (m *MockResourceSpecGetterWithUpdateParameters) ResourceGroupName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResourceGroupName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ResourceGroupName indicates an expected call of ResourceGroupName.
+func (mr *MockResourceSpecGetterWithUpdateParametersMockRecorder) ResourceGroupName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResourceGroupName", reflect.TypeOf((*MockResourceSpecGetterWithUpdateParameters)(nil).ResourceGroupName))
+}
+
+// ResourceName mocks base method.
+func (m *MockResourceSpecGetterWithUpdateParameters) ResourceName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResourceName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ResourceName indicates an expected call of ResourceName.
+func (mr *MockResourceSpecGetterWithUpdateParametersMockRecorder) ResourceName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResourceName", reflect.TypeOf((*MockResourceSpecGetterWithUpdateParameters)(nil).ResourceName))
+}
+
 // MockResourceSpecGetterWithHeaders is a mock of ResourceSpecGetterWithHeaders interface.
 type MockResourceSpecGetterWithHeaders struct {
 	ctrl     *gomock.Controller
