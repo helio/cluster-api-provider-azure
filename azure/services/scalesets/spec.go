@@ -134,6 +134,125 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 	return vmss, nil
 }
 
+func (s *ScaleSetSpec) ParametersForUpdate(ctx context.Context, existing interface{}) (parameters interface{}, err error) {
+	if existing == nil {
+		return nil, errors.New("existing parameters required")
+	}
+
+	if s.AcceleratedNetworking == nil {
+		// set accelerated networking to the capability of the VMSize
+		accelNet := s.SKU.HasCapability(resourceskus.AcceleratedNetworking)
+		s.AcceleratedNetworking = &accelNet
+	}
+
+	extensions, err := s.generateExtensions(ctx)
+	if err != nil {
+		return armcompute.VirtualMachineScaleSet{}, err
+	}
+
+	securityProfile, err := s.getSecurityProfile()
+	if err != nil {
+		return armcompute.VirtualMachineScaleSet{}, err
+	}
+
+	_, _, billingProfile, err := converters.GetSpotVMOptions(s.SpotVMOptions, s.OSDisk.DiffDiskSettings)
+	if err != nil {
+		return armcompute.VirtualMachineScaleSet{}, errors.Wrapf(err, "failed to get Spot VM options")
+	}
+
+	diagnosticsProfile := converters.GetDiagnosticsProfile(s.DiagnosticsProfile)
+
+	orchestrationMode := converters.GetOrchestrationMode(s.OrchestrationMode)
+
+	vmss := armcompute.VirtualMachineScaleSetUpdate{
+		SKU: &armcompute.SKU{
+			Name:     ptr.To(s.Size),
+			Tier:     ptr.To("Standard"),
+			Capacity: ptr.To[int64](s.Capacity),
+		},
+		Plan: s.generateImagePlan(ctx),
+		Properties: &armcompute.VirtualMachineScaleSetUpdateProperties{
+			SinglePlacementGroup: ptr.To(false),
+			VirtualMachineProfile: &armcompute.VirtualMachineScaleSetUpdateVMProfile{
+				SecurityProfile:    securityProfile,
+				DiagnosticsProfile: diagnosticsProfile,
+				NetworkProfile: &armcompute.VirtualMachineScaleSetUpdateNetworkProfile{
+					NetworkInterfaceConfigurations: azure.PtrSlice(s.getVirtualMachineScaleSetUpdateNetworkConfiguration()),
+				},
+				BillingProfile: billingProfile,
+				ExtensionProfile: &armcompute.VirtualMachineScaleSetExtensionProfile{
+					Extensions: azure.PtrSlice(&extensions),
+				},
+			},
+		},
+	}
+
+	// Set properties specific to VMSS orchestration mode
+	// See https://learn.microsoft.com/en-us/azure/virtual-machine-scale-sets/virtual-machine-scale-sets-orchestration-modes for more details
+	switch orchestrationMode {
+	case armcompute.OrchestrationModeUniform: // Uniform VMSS
+		vmss.Properties.Overprovision = ptr.To(false)
+		vmss.Properties.UpgradePolicy = &armcompute.UpgradePolicy{Mode: ptr.To(armcompute.UpgradeModeManual)}
+	case armcompute.OrchestrationModeFlexible: // VMSS Flex, VMs are treated as individual virtual machines
+		vmss.Properties.VirtualMachineProfile.NetworkProfile.NetworkAPIVersion =
+			ptr.To(armcompute.NetworkAPIVersionTwoThousandTwenty1101)
+	}
+
+	// Assign Identity to VMSS
+	if s.Identity == infrav1.VMIdentitySystemAssigned {
+		vmss.Identity = &armcompute.VirtualMachineScaleSetIdentity{
+			Type: ptr.To(armcompute.ResourceIdentityTypeSystemAssigned),
+		}
+	} else if s.Identity == infrav1.VMIdentityUserAssigned {
+		userIdentitiesMap, err := converters.UserAssignedIdentitiesToVMSSSDK(s.UserAssignedIdentities)
+		if err != nil {
+			return vmss, errors.Wrapf(err, "failed to assign identity %q", s.Name)
+		}
+		vmss.Identity = &armcompute.VirtualMachineScaleSetIdentity{
+			Type:                   ptr.To(armcompute.ResourceIdentityTypeUserAssigned),
+			UserAssignedIdentities: userIdentitiesMap,
+		}
+	}
+
+	// Provisionally detect whether there is any Data Disk defined which uses UltraSSDs.
+	// If that's the case, enable the UltraSSD capability.
+	for _, dataDisk := range s.DataDisks {
+		if dataDisk.ManagedDisk != nil && dataDisk.ManagedDisk.StorageAccountType == string(armcompute.StorageAccountTypesUltraSSDLRS) {
+			vmss.Properties.AdditionalCapabilities = &armcompute.AdditionalCapabilities{
+				UltraSSDEnabled: ptr.To(true),
+			}
+		}
+	}
+
+	// Set Additional Capabilities if any is present on the spec.
+	if s.AdditionalCapabilities != nil {
+		// Set UltraSSDEnabled if a specific value is set on the spec for it.
+		if s.AdditionalCapabilities.UltraSSDEnabled != nil {
+			vmss.Properties.AdditionalCapabilities.UltraSSDEnabled = s.AdditionalCapabilities.UltraSSDEnabled
+		}
+	}
+
+	if s.TerminateNotificationTimeout != nil {
+		vmss.Properties.VirtualMachineProfile.ScheduledEventsProfile = &armcompute.ScheduledEventsProfile{
+			TerminateNotificationProfile: &armcompute.TerminateNotificationProfile{
+				NotBeforeTimeout: ptr.To(fmt.Sprintf("PT%dM", *s.TerminateNotificationTimeout)),
+				Enable:           ptr.To(true),
+			},
+		}
+	}
+
+	tags := infrav1.Build(infrav1.BuildParams{
+		ClusterName: s.ClusterName,
+		Lifecycle:   infrav1.ResourceLifecycleOwned,
+		Name:        ptr.To(s.Name),
+		Role:        ptr.To(infrav1.Node),
+		Additional:  s.AdditionalTags,
+	})
+
+	vmss.Tags = converters.TagsToMap(tags)
+	return vmss, nil
+}
+
 // Parameters returns the parameters for the Scale Set.
 func (s *ScaleSetSpec) Parameters(ctx context.Context, existing interface{}) (parameters interface{}, err error) {
 	if existing != nil {
@@ -350,6 +469,72 @@ func (s *ScaleSetSpec) getVirtualMachineScaleSetNetworkConfiguration() *[]armcom
 			ipv6Config := armcompute.VirtualMachineScaleSetIPConfiguration{
 				Name: ptr.To("ipConfigv6"),
 				Properties: &armcompute.VirtualMachineScaleSetIPConfigurationProperties{
+					PrivateIPAddressVersion: ptr.To(armcompute.IPVersionIPv6),
+					Primary:                 ptr.To(false),
+					Subnet: &armcompute.APIEntityReference{
+						ID: ptr.To(azure.SubnetID(s.SubscriptionID, s.VNetResourceGroup, s.VNetName, n.SubnetName)),
+					},
+				},
+			}
+			ipconfigs = append(ipconfigs, ipv6Config)
+		}
+		if i == 0 {
+			ipconfigs[0].Properties.LoadBalancerBackendAddressPools = azure.PtrSlice(&backendAddressPools)
+			nicConfig.Properties.Primary = ptr.To(true)
+		}
+		nicConfig.Properties.IPConfigurations = azure.PtrSlice(&ipconfigs)
+		nicConfigs = append(nicConfigs, nicConfig)
+	}
+	return &nicConfigs
+}
+
+func (s *ScaleSetSpec) getVirtualMachineScaleSetUpdateNetworkConfiguration() *[]armcompute.VirtualMachineScaleSetUpdateNetworkConfiguration {
+	var backendAddressPools []armcompute.SubResource
+	if s.PublicLBName != "" {
+		if s.PublicLBAddressPoolName != "" {
+			backendAddressPools = append(backendAddressPools,
+				armcompute.SubResource{
+					ID: ptr.To(azure.AddressPoolID(s.SubscriptionID, s.ResourceGroup, s.PublicLBName, s.PublicLBAddressPoolName)),
+				})
+		}
+	}
+	nicConfigs := []armcompute.VirtualMachineScaleSetUpdateNetworkConfiguration{}
+	for i, n := range s.NetworkInterfaces {
+		nicConfig := armcompute.VirtualMachineScaleSetUpdateNetworkConfiguration{}
+		nicConfig.Properties = &armcompute.VirtualMachineScaleSetUpdateNetworkConfigurationProperties{}
+		nicConfig.Name = ptr.To(s.Name + "-nic-" + strconv.Itoa(i))
+		nicConfig.Properties.EnableIPForwarding = ptr.To(true)
+		if n.AcceleratedNetworking != nil {
+			nicConfig.Properties.EnableAcceleratedNetworking = n.AcceleratedNetworking
+		} else {
+			// If AcceleratedNetworking is not specified, use the value from the VMSS spec.
+			// It will be set to true if the VMSS SKU supports it.
+			nicConfig.Properties.EnableAcceleratedNetworking = s.AcceleratedNetworking
+		}
+
+		// Create IPConfigs
+		ipconfigs := []armcompute.VirtualMachineScaleSetUpdateIPConfiguration{}
+		for j := 0; j < n.PrivateIPConfigs; j++ {
+			ipconfig := armcompute.VirtualMachineScaleSetUpdateIPConfiguration{
+				Name: ptr.To(fmt.Sprintf("ipConfig" + strconv.Itoa(j))),
+				Properties: &armcompute.VirtualMachineScaleSetUpdateIPConfigurationProperties{
+					PrivateIPAddressVersion: ptr.To(armcompute.IPVersionIPv4),
+					Subnet: &armcompute.APIEntityReference{
+						ID: ptr.To(azure.SubnetID(s.SubscriptionID, s.VNetResourceGroup, s.VNetName, n.SubnetName)),
+					},
+				},
+			}
+
+			if j == 0 {
+				// Always use the first IPConfig as the Primary
+				ipconfig.Properties.Primary = ptr.To(true)
+			}
+			ipconfigs = append(ipconfigs, ipconfig)
+		}
+		if s.IPv6Enabled {
+			ipv6Config := armcompute.VirtualMachineScaleSetUpdateIPConfiguration{
+				Name: ptr.To("ipConfigv6"),
+				Properties: &armcompute.VirtualMachineScaleSetUpdateIPConfigurationProperties{
 					PrivateIPAddressVersion: ptr.To(armcompute.IPVersionIPv6),
 					Primary:                 ptr.To(false),
 					Subnet: &armcompute.APIEntityReference{

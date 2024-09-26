@@ -53,7 +53,7 @@ type (
 		Scope ScaleSetScope
 		Client
 		resourceSKUCache *resourceskus.Cache
-		async.Reconciler
+		async.ReconcilerWithUpdate
 	}
 )
 
@@ -64,8 +64,11 @@ func New(scope ScaleSetScope, skuCache *resourceskus.Cache) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		Reconciler: async.New[armcompute.VirtualMachineScaleSetsClientCreateOrUpdateResponse,
-			armcompute.VirtualMachineScaleSetsClientDeleteResponse](scope, client, client),
+		ReconcilerWithUpdate: async.NewWithUpdater[
+			armcompute.VirtualMachineScaleSetsClientCreateOrUpdateResponse,
+			armcompute.VirtualMachineScaleSetsClientUpdateResponse,
+			armcompute.VirtualMachineScaleSetsClientDeleteResponse,
+		](scope, client, client, client),
 		Client:           client,
 		Scope:            scope,
 		resourceSKUCache: skuCache,
@@ -96,7 +99,7 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 		return errors.Errorf("%T is not of type ScaleSetSpec", spec)
 	}
 
-	_, err := s.Client.Get(ctx, spec)
+	existingSpec, err := s.Client.Get(ctx, spec)
 	if err == nil {
 		// We can only get the existing instances if the VMSS already exists
 		scaleSetSpec.VMSSInstances, err = s.Client.ListInstances(ctx, spec.ResourceGroupName(), spec.ResourceName())
@@ -109,8 +112,14 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 		return errors.Wrapf(err, "failed to get existing VMSS")
 	}
 
-	result, err := s.CreateOrUpdateResource(ctx, scaleSetSpec, serviceName)
-	s.Scope.UpdatePutStatus(infrav1.BootstrapSucceededCondition, serviceName, err)
+	var result interface{}
+	if existingSpec != nil {
+		result, err = s.UpdateResource(ctx, scaleSetSpec, serviceName)
+		s.Scope.UpdatePatchStatus(infrav1.BootstrapSucceededCondition, serviceName, err)
+	} else {
+		result, err = s.CreateOrUpdateResource(ctx, scaleSetSpec, serviceName)
+		s.Scope.UpdatePutStatus(infrav1.BootstrapSucceededCondition, serviceName, err)
+	}
 
 	if err == nil && result != nil {
 		vmss, ok := result.(armcompute.VirtualMachineScaleSet)
