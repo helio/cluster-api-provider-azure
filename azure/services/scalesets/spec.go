@@ -161,6 +161,11 @@ func (s *ScaleSetSpec) ParametersForUpdate(ctx context.Context, existing interfa
 		return armcompute.VirtualMachineScaleSet{}, err
 	}
 
+	storageProfile, err := s.generateUpdateStorageProfile(ctx)
+	if err != nil {
+		return armcompute.VirtualMachineScaleSet{}, err
+	}
+
 	securityProfile, err := s.getSecurityProfile()
 	if err != nil {
 		return armcompute.VirtualMachineScaleSet{}, err
@@ -172,6 +177,11 @@ func (s *ScaleSetSpec) ParametersForUpdate(ctx context.Context, existing interfa
 	}
 
 	diagnosticsProfile := converters.GetDiagnosticsProfile(s.DiagnosticsProfile)
+
+	osProfile, err := s.generateUpdateOSProfile(ctx)
+	if err != nil {
+		return armcompute.VirtualMachineScaleSet{}, err
+	}
 
 	orchestrationMode := converters.GetOrchestrationMode(s.OrchestrationMode)
 
@@ -185,6 +195,8 @@ func (s *ScaleSetSpec) ParametersForUpdate(ctx context.Context, existing interfa
 		Properties: &armcompute.VirtualMachineScaleSetUpdateProperties{
 			SinglePlacementGroup: ptr.To(false),
 			VirtualMachineProfile: &armcompute.VirtualMachineScaleSetUpdateVMProfile{
+				OSProfile:          osProfile,
+				StorageProfile:     storageProfile,
 				SecurityProfile:    securityProfile,
 				DiagnosticsProfile: diagnosticsProfile,
 				NetworkProfile: &armcompute.VirtualMachineScaleSetUpdateNetworkProfile{
@@ -641,6 +653,80 @@ func (s *ScaleSetSpec) generateStorageProfile(ctx context.Context) (*armcompute.
 	return storageProfile, nil
 }
 
+// generateStorageProfile generates a pointer to an armcompute.VirtualMachineScaleSetUpdateStorageProfile which can utilized for VM creation.
+func (s *ScaleSetSpec) generateUpdateStorageProfile(ctx context.Context) (*armcompute.VirtualMachineScaleSetUpdateStorageProfile, error) {
+	_, _, done := tele.StartSpanWithLogger(ctx, "scalesets.ScaleSetSpec.generateUpdateStorageProfile")
+	defer done()
+
+	storageProfile := &armcompute.VirtualMachineScaleSetUpdateStorageProfile{
+		OSDisk: &armcompute.VirtualMachineScaleSetUpdateOSDisk{
+			DiskSizeGB: s.OSDisk.DiskSizeGB,
+		},
+	}
+
+	// enable ephemeral OS
+	if s.OSDisk.DiffDiskSettings != nil {
+		if !s.SKU.HasCapability(resourceskus.EphemeralOSDisk) {
+			return nil, fmt.Errorf("vm size %s does not support ephemeral os. select a different vm size or disable ephemeral os", s.Size)
+		}
+
+		storageProfile.OSDisk.DiffDiskSettings = &armcompute.DiffDiskSettings{
+			Option: ptr.To(armcompute.DiffDiskOptions(s.OSDisk.DiffDiskSettings.Option)),
+		}
+
+		if s.OSDisk.DiffDiskSettings.Placement != nil {
+			storageProfile.OSDisk.DiffDiskSettings.Placement = ptr.To(armcompute.DiffDiskPlacement(*s.OSDisk.DiffDiskSettings.Placement))
+		}
+	}
+
+	if s.OSDisk.ManagedDisk != nil {
+		storageProfile.OSDisk.ManagedDisk = &armcompute.VirtualMachineScaleSetManagedDiskParameters{}
+		if s.OSDisk.ManagedDisk.StorageAccountType != "" {
+			storageProfile.OSDisk.ManagedDisk.StorageAccountType = ptr.To(armcompute.StorageAccountTypes(s.OSDisk.ManagedDisk.StorageAccountType))
+		}
+		if s.OSDisk.ManagedDisk.DiskEncryptionSet != nil {
+			storageProfile.OSDisk.ManagedDisk.DiskEncryptionSet = &armcompute.DiskEncryptionSetParameters{ID: ptr.To(s.OSDisk.ManagedDisk.DiskEncryptionSet.ID)}
+		}
+	}
+
+	if s.OSDisk.CachingType != "" {
+		storageProfile.OSDisk.Caching = ptr.To(armcompute.CachingTypes(s.OSDisk.CachingType))
+	}
+
+	dataDisks := make([]armcompute.VirtualMachineScaleSetDataDisk, len(s.DataDisks))
+	for i, disk := range s.DataDisks {
+		dataDisks[i] = armcompute.VirtualMachineScaleSetDataDisk{
+			CreateOption: ptr.To(armcompute.DiskCreateOptionTypesEmpty),
+			DiskSizeGB:   ptr.To[int32](disk.DiskSizeGB),
+			Lun:          disk.Lun,
+			Name:         ptr.To(azure.GenerateDataDiskName(s.Name, disk.NameSuffix)),
+		}
+
+		if disk.ManagedDisk != nil {
+			dataDisks[i].ManagedDisk = &armcompute.VirtualMachineScaleSetManagedDiskParameters{
+				StorageAccountType: ptr.To(armcompute.StorageAccountTypes(disk.ManagedDisk.StorageAccountType)),
+			}
+
+			if disk.ManagedDisk.DiskEncryptionSet != nil {
+				dataDisks[i].ManagedDisk.DiskEncryptionSet = &armcompute.DiskEncryptionSetParameters{ID: ptr.To(disk.ManagedDisk.DiskEncryptionSet.ID)}
+			}
+		}
+	}
+	storageProfile.DataDisks = azure.PtrSlice(&dataDisks)
+
+	if s.VMImage == nil {
+		return nil, errors.Errorf("vm image is nil")
+	}
+	imageRef, err := converters.ImageToSDK(s.VMImage)
+	if err != nil {
+		return nil, err
+	}
+
+	storageProfile.ImageReference = imageRef
+
+	return storageProfile, nil
+}
+
 func (s *ScaleSetSpec) generateOSProfile(_ context.Context) (*armcompute.VirtualMachineScaleSetOSProfile, error) {
 	sshKey, err := base64.StdEncoding.DecodeString(s.SSHKeyData)
 	if err != nil {
@@ -663,6 +749,38 @@ func (s *ScaleSetSpec) generateOSProfile(_ context.Context) (*armcompute.Virtual
 		// Access is provided via SSH public key that is set during deployment
 		// Azure also provides a way to reset user passwords in the case of need.
 		osProfile.AdminPassword = ptr.To(generators.SudoRandomPassword(123))
+		osProfile.WindowsConfiguration = &armcompute.WindowsConfiguration{
+			EnableAutomaticUpdates: ptr.To(false),
+		}
+	default:
+		osProfile.LinuxConfiguration = &armcompute.LinuxConfiguration{
+			DisablePasswordAuthentication: ptr.To(true),
+			SSH: &armcompute.SSHConfiguration{
+				PublicKeys: []*armcompute.SSHPublicKey{
+					{
+						Path:    ptr.To(fmt.Sprintf("/home/%s/.ssh/authorized_keys", azure.DefaultUserName)),
+						KeyData: ptr.To(string(sshKey)),
+					},
+				},
+			},
+		}
+	}
+
+	return osProfile, nil
+}
+
+func (s *ScaleSetSpec) generateUpdateOSProfile(_ context.Context) (*armcompute.VirtualMachineScaleSetUpdateOSProfile, error) {
+	sshKey, err := base64.StdEncoding.DecodeString(s.SSHKeyData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to decode ssh public key")
+	}
+
+	osProfile := &armcompute.VirtualMachineScaleSetUpdateOSProfile{
+		CustomData: ptr.To(s.BootstrapData),
+	}
+
+	switch s.OSDisk.OSType {
+	case string(armcompute.OperatingSystemTypesWindows):
 		osProfile.WindowsConfiguration = &armcompute.WindowsConfiguration{
 			EnableAutomaticUpdates: ptr.To(false),
 		}
