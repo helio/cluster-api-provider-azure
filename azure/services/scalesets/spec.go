@@ -134,6 +134,13 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 		return nil, nil
 	}
 
+	// if there are no model changes and no change in custom data, get rid of OsProfile to avoid unnecessary VMSS model
+	// updates.
+	if !hasModelChanges && !s.ShouldPatchCustomData {
+		log.Info("### removing osProfile")
+		vmss.Properties.VirtualMachineProfile.OSProfile = nil
+	}
+
 	log.Info("updating VMSS",
 		"name", s.Name,
 		"capacity", vmss.SKU.Capacity,
