@@ -177,36 +177,6 @@ func (ac *AzureClient) CreateOrUpdateAsync(ctx context.Context, spec azure.Resou
 	return resp.VirtualMachineScaleSet, nil, err
 }
 
-func (ac *AzureClient) UpdateAsync(ctx context.Context, spec azure.ResourceSpecGetter, resumeToken string, parameters interface{}) (result interface{}, poller *runtime.Poller[armcompute.VirtualMachineScaleSetsClientUpdateResponse], err error) {
-	ctx, _, done := tele.StartSpanWithLogger(ctx, "scalesets.AzureClient.UpdateAsync")
-	defer done()
-
-	scaleset, ok := parameters.(armcompute.VirtualMachineScaleSetUpdate)
-	if !ok && parameters != nil {
-		return nil, nil, errors.Errorf("%T is not an armcompute.VirtualMachineScaleSetUpdate", parameters)
-	}
-
-	opts := &armcompute.VirtualMachineScaleSetsClientBeginUpdateOptions{ResumeToken: resumeToken}
-	poller, err = ac.scalesets.BeginUpdate(ctx, spec.ResourceGroupName(), spec.ResourceName(), scaleset, opts)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, ac.apiCallTimeout)
-	defer cancel()
-
-	pollOpts := &runtime.PollUntilDoneOptions{Frequency: async.DefaultPollerFrequency}
-	resp, err := poller.PollUntilDone(ctx, pollOpts)
-	if err != nil {
-		// if an error occurs, return the poller.
-		// this means the long-running operation didn't finish in the specified timeout.
-		return nil, poller, err
-	}
-
-	// if the operation completed, return a nil poller
-	return resp.VirtualMachineScaleSet, nil, err
-}
-
 // DeleteAsync is the operation to delete a virtual machine scale set asynchronously. DeleteAsync sends a DELETE
 // request to Azure and if accepted without error, the func will return a poller which can be used to track the ongoing
 // progress of the operation.

@@ -45,11 +45,6 @@ type Creator[T any] interface {
 	CreateOrUpdateAsync(ctx context.Context, spec azure.ResourceSpecGetter, resumeToken string, parameters interface{}) (result interface{}, poller *runtime.Poller[T], err error)
 }
 
-type Updater[T any] interface {
-	Getter
-	UpdateAsync(ctx context.Context, spec azure.ResourceSpecGetter, resumeToken string, parameters interface{}) (result interface{}, poller *runtime.Poller[T], err error)
-}
-
 // Deleter deletes a resource asynchronously.
 type Deleter[T any] interface {
 	DeleteAsync(ctx context.Context, spec azure.ResourceSpecGetter, resumeToken string) (poller *runtime.Poller[T], err error)
@@ -59,10 +54,4 @@ type Deleter[T any] interface {
 type Reconciler interface {
 	CreateOrUpdateResource(ctx context.Context, spec azure.ResourceSpecGetter, serviceName string) (result interface{}, err error)
 	DeleteResource(ctx context.Context, spec azure.ResourceSpecGetter, serviceName string) (err error)
-}
-
-// ReconcilerWithUpdate embeds a Reconciler and adds the possibility to use an update call.
-type ReconcilerWithUpdate interface {
-	Reconciler
-	UpdateResource(ctx context.Context, spec azure.ResourceSpecGetterWithUpdateParameters, serviceName string) (result interface{}, err error)
 }

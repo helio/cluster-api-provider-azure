@@ -55,7 +55,7 @@ type (
 		Scope ScaleSetScope
 		Client
 		resourceSKUCache *resourceskus.Cache
-		async.ReconcilerWithUpdate
+		async.Reconciler
 	}
 )
 
@@ -66,11 +66,8 @@ func New(scope ScaleSetScope, skuCache *resourceskus.Cache) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		ReconcilerWithUpdate: async.NewWithUpdater[
-			armcompute.VirtualMachineScaleSetsClientCreateOrUpdateResponse,
-			armcompute.VirtualMachineScaleSetsClientUpdateResponse,
-			armcompute.VirtualMachineScaleSetsClientDeleteResponse,
-		](scope, client, client, client),
+		Reconciler: async.New[armcompute.VirtualMachineScaleSetsClientCreateOrUpdateResponse,
+			armcompute.VirtualMachineScaleSetsClientDeleteResponse](scope, client, client),
 		Client:           client,
 		Scope:            scope,
 		resourceSKUCache: skuCache,
@@ -101,7 +98,7 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 		return errors.Errorf("%T is not of type ScaleSetSpec", spec)
 	}
 
-	existingSpec, err := s.Client.Get(ctx, spec)
+	existing, err := s.Client.Get(ctx, spec)
 	if err == nil {
 		// We can only get the existing instances if the VMSS already exists
 		scaleSetSpec.VMSSInstances, err = s.Client.ListInstances(ctx, spec.ResourceGroupName(), spec.ResourceName())
@@ -114,14 +111,8 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 		return errors.Wrapf(err, "failed to get existing VMSS")
 	}
 
-	var result interface{}
-	if existingSpec != nil {
-		result, err = s.UpdateResource(ctx, scaleSetSpec, serviceName)
-		s.Scope.UpdatePatchStatus(infrav1.BootstrapSucceededCondition, serviceName, err)
-	} else {
-		result, err = s.CreateOrUpdateResource(ctx, scaleSetSpec, serviceName)
-		s.Scope.UpdatePutStatus(infrav1.BootstrapSucceededCondition, serviceName, err)
-	}
+	result, err := s.CreateOrUpdateResource(ctx, scaleSetSpec, serviceName)
+	s.Scope.UpdatePutStatus(infrav1.BootstrapSucceededCondition, serviceName, err)
 
 	if err == nil && result != nil {
 		vmss, ok := result.(armcompute.VirtualMachineScaleSet)
@@ -129,8 +120,8 @@ func (s *Service) Reconcile(ctx context.Context) (retErr error) {
 			return errors.Errorf("%T is not an armcompute.VirtualMachineScaleSet", result)
 		}
 
-		if existingSpec != nil {
-			if existingVmss, ok := existingSpec.(armcompute.VirtualMachineScaleSet); ok {
+		if existing != nil {
+			if existingVmss, ok := existing.(armcompute.VirtualMachineScaleSet); ok {
 				vmssEqual := cmp.Equal(vmss, existingVmss)
 				if !vmssEqual {
 					log.Info("updated VMSS", "diff", cmp.Diff(existingVmss, vmss))

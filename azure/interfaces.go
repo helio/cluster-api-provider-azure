@@ -143,15 +143,6 @@ type ResourceSpecGetter interface {
 	Parameters(ctx context.Context, existing interface{}) (params interface{}, err error)
 }
 
-// ResourceSpecGetterWithUpdateParameters is a ResourceSpecGetter that supports a update call with update parameters.
-type ResourceSpecGetterWithUpdateParameters interface {
-	ResourceSpecGetter
-	// ParametersForUpdate takes the existing resource and returns the desired parameters of the resource.
-	// If the resource does not exist, or we do not care about existing parameters to update the resource, existing should be nil.
-	// If no update is needed on the resource, Parameters should return nil.
-	ParametersForUpdate(ctx context.Context, existing interface{}) (params interface{}, err error)
-}
-
 // ResourceSpecGetterWithHeaders is a ResourceSpecGetter that can return custom headers to be added to API calls.
 type ResourceSpecGetterWithHeaders interface {
 	ResourceSpecGetter

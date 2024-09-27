@@ -42,10 +42,6 @@ type Service[C, D any] struct {
 	Creator[C]
 	Deleter[D]
 }
-type ServiceWithUpdater[C, U, D any] struct {
-	*Service[C, D]
-	Updater[U]
-}
 
 // New creates an async Service.
 func New[C, D any](scope FutureScope, createClient Creator[C], deleteClient Deleter[D]) *Service[C, D] {
@@ -53,12 +49,6 @@ func New[C, D any](scope FutureScope, createClient Creator[C], deleteClient Dele
 		Scope:   scope,
 		Creator: createClient,
 		Deleter: deleteClient,
-	}
-}
-func NewWithUpdater[C, U, D any](scope FutureScope, createClient Creator[C], updateClient Updater[U], deleteClient Deleter[D]) *ServiceWithUpdater[C, U, D] {
-	return &ServiceWithUpdater[C, U, D]{
-		Service: New(scope, createClient, deleteClient),
-		Updater: updateClient,
 	}
 }
 
@@ -134,78 +124,6 @@ func (s *Service[C, D]) CreateOrUpdateResource(ctx context.Context, spec azure.R
 	}
 
 	log.V(2).Info("successfully created or updated resource", "service", serviceName, "resource", resourceName, "resourceGroup", rgName)
-	return result, nil
-}
-
-// UpdateResource deletes a resource asynchronously.
-func (s *ServiceWithUpdater[C, U, D]) UpdateResource(ctx context.Context, spec azure.ResourceSpecGetterWithUpdateParameters, serviceName string) (result interface{}, err error) {
-	ctx, log, done := tele.StartSpanWithLogger(ctx, "async.Service.UpdateResource")
-	defer done()
-
-	resourceName := spec.ResourceName()
-	rgName := spec.ResourceGroupName()
-	futureType := infrav1.PatchFuture
-
-	// Check if there is an ongoing long-running operation.
-	resumeToken := ""
-	if future := s.Scope.GetLongRunningOperationState(resourceName, serviceName, futureType); future != nil {
-		t, err := converters.FutureToResumeToken(*future)
-		if err != nil {
-			s.Scope.DeleteLongRunningOperationState(resourceName, serviceName, futureType)
-			return "", errors.Wrap(err, "could not decode future data, resetting long-running operation state")
-		}
-		resumeToken = t
-	}
-
-	// Only when no long running operation is currently in progress do we need to get the parameters.
-	// The polling implemented by the SDK does not use parameters when a resume token exists.
-	var parameters interface{}
-	var existingResource interface{}
-	if resumeToken == "" {
-		// Get the resource if it already exists, and use it to construct the desired resource parameters.
-		existing, err := s.Updater.Get(ctx, spec)
-		if err != nil {
-			errWrapped := errors.Wrapf(err, "failed to get existing resource %s/%s (service: %s)", rgName, resourceName, serviceName)
-			return nil, azure.WithTransientError(errWrapped, getRetryAfterFromError(err))
-		}
-
-		existingResource = existing
-		log.V(2).Info("successfully got existing resource", "service", serviceName, "resource", resourceName, "resourceGroup", rgName)
-
-		// Construct parameters using the resource spec and information from the existing resource, if there is one.
-		parameters, err = spec.ParametersForUpdate(ctx, existingResource)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get desired parameters for resource %s/%s (service: %s)", rgName, resourceName, serviceName)
-		} else if parameters == nil {
-			// Nothing to do, don't create or update the resource and return the existing resource.
-			log.V(2).Info("resource up to date", "service", serviceName, "resource", resourceName, "resourceGroup", rgName)
-			return existingResource, nil
-		}
-
-		// Update the resource with the desired parameters.
-		log.V(2).Info("updating resource", "service", serviceName, "resource", resourceName, "resourceGroup", rgName)
-	}
-
-	result, poller, err := s.Updater.UpdateAsync(ctx, spec, resumeToken, parameters)
-	errWrapped := errors.Wrapf(err, "failed to update resource %s/%s (service: %s)", rgName, resourceName, serviceName)
-	if poller != nil && azure.IsContextDeadlineExceededOrCanceledError(err) {
-		future, err := converters.PollerToFuture(poller, infrav1.PatchFuture, serviceName, resourceName, rgName)
-		if err != nil {
-			return nil, errWrapped
-		}
-		s.Scope.SetLongRunningOperationState(future)
-		return nil, azure.WithTransientError(azure.NewOperationNotDoneError(future), requeueTime(s.Scope))
-	}
-
-	// Once the operation is done, delete the long-running operation state. Even if the operation ended with
-	// an error, clear out any lingering state to try the operation again.
-	s.Scope.DeleteLongRunningOperationState(resourceName, serviceName, futureType)
-
-	if err != nil {
-		return nil, errWrapped
-	}
-
-	log.V(2).Info("successfully updated resource", "service", serviceName, "resource", resourceName, "resourceGroup", rgName)
 	return result, nil
 }
 
