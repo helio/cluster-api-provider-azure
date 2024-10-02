@@ -137,8 +137,10 @@ func (s *ScaleSetSpec) existingParameters(ctx context.Context, existing interfac
 	// if there are no model changes and no change in custom data, get rid of all properties to avoid unnecessary VMSS model
 	// updates.
 	if !hasModelChanges && !s.ShouldPatchCustomData {
-		log.Info("### removing all properties")
-		vmss.Properties = nil
+		log.Info("### removing virtual machine profile")
+		vmss.Properties.VirtualMachineProfile = nil
+	} else {
+		log.Info("### not removing virtual machine profile", "hasModelChanges", hasModelChanges, "shouldPatchCustomData", s.ShouldPatchCustomData)
 	}
 
 	log.Info("updating VMSS",
