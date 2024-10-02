@@ -84,6 +84,13 @@ func (s *azureMachinePoolService) Reconcile(ctx context.Context) error {
 		}
 	}
 
+	vmSKU, err := s.skuCache.Get(ctx, s.scope.AzureMachinePool.Spec.Template.VMSize, resourceskus.VirtualMachines)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get VM SKU %s in compute api", s.scope.AzureMachinePool.Spec.Template.VMSize)
+	}
+
+	s.scope.AzureMachinePool.Status.Capacity = resourceskus.MapCapabilitiesToResourceList(vmSKU.Capabilities)
+
 	return nil
 }
 

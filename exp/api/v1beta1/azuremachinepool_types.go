@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
@@ -315,6 +316,12 @@ type (
 		// InfrastructureMachineKind is the kind of the infrastructure resources behind MachinePool Machines.
 		// +optional
 		InfrastructureMachineKind string `json:"infrastructureMachineKind,omitempty"`
+
+		// Capacity defines the resource capacity for this machine.
+		// This value is used for autoscaling from zero operations as defined in:
+		// https://github.com/kubernetes-sigs/cluster-api/blob/main/docs/proposals/20210310-opt-in-autoscaling-from-zero.md
+		// +optional
+		Capacity corev1.ResourceList `json:"capacity,omitempty"`
 	}
 
 	// AzureMachinePoolInstanceStatus provides status information for each instance in the VMSS.

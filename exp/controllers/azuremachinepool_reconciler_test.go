@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
+	"k8s.io/utils/ptr"
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-azure/azure"
 	"sigs.k8s.io/cluster-api-provider-azure/azure/mock_azure"
@@ -83,8 +84,10 @@ func TestAzureMachinePoolServiceReconcile(t *testing.T) {
 					MachinePool: &expv1.MachinePool{},
 					AzureMachinePool: &infrav1exp.AzureMachinePool{
 						Spec: infrav1exp.AzureMachinePoolSpec{
+							Location: "test-location",
 							Template: infrav1exp.AzureMachinePoolMachineTemplate{
 								SubnetName: "test-subnet",
+								VMSize:     "VM_SIZE",
 							},
 						},
 					},
@@ -94,7 +97,7 @@ func TestAzureMachinePoolServiceReconcile(t *testing.T) {
 					svcTwoMock,
 					svcThreeMock,
 				},
-				skuCache: resourceskus.NewStaticCache([]armcompute.ResourceSKU{}, ""),
+				skuCache: resourceskus.NewStaticCache(getFakeSkus(), "test-location"),
 			}
 
 			err := s.Reconcile(context.TODO())
@@ -242,5 +245,49 @@ func TestAzureMachinePoolServiceDelete(t *testing.T) {
 				g.Expect(err).NotTo(HaveOccurred())
 			}
 		})
+	}
+}
+
+func getFakeSkus() []armcompute.ResourceSKU {
+	return []armcompute.ResourceSKU{
+		{
+			Name:         ptr.To("VM_SIZE"),
+			ResourceType: ptr.To(string(resourceskus.VirtualMachines)),
+			Kind:         ptr.To(string(resourceskus.VirtualMachines)),
+			Locations: []*string{
+				ptr.To("test-location"),
+			},
+			LocationInfo: []*armcompute.ResourceSKULocationInfo{
+				{
+					Location: ptr.To("test-location"),
+					Zones:    []*string{ptr.To("1"), ptr.To("3")},
+					ZoneDetails: []*armcompute.ResourceSKUZoneDetails{
+						{
+							Capabilities: []*armcompute.ResourceSKUCapabilities{
+								{
+									Name:  ptr.To("UltraSSDAvailable"),
+									Value: ptr.To("True"),
+								},
+							},
+							Name: []*string{ptr.To("1"), ptr.To("3")},
+						},
+					},
+				},
+			},
+			Capabilities: []*armcompute.ResourceSKUCapabilities{
+				{
+					Name:  ptr.To(resourceskus.AcceleratedNetworking),
+					Value: ptr.To(string(resourceskus.CapabilityUnsupported)),
+				},
+				{
+					Name:  ptr.To(resourceskus.VCPUs),
+					Value: ptr.To("4"),
+				},
+				{
+					Name:  ptr.To(resourceskus.MemoryGB),
+					Value: ptr.To("4"),
+				},
+			},
+		},
 	}
 }

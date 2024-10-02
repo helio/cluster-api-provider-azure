@@ -17,8 +17,12 @@ limitations under the License.
 package resourceskus
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
 	"github.com/pkg/errors"
@@ -168,4 +172,20 @@ func (s SKU) HasLocationCapability(capabilityName, location, zone string) bool {
 		}
 	}
 	return false
+}
+
+func MapCapabilitiesToResourceList(capabilities []*armcompute.ResourceSKUCapabilities) corev1.ResourceList {
+	rl := make(corev1.ResourceList)
+	for _, c := range capabilities {
+		if c != nil || c.Name == nil || c.Value == nil {
+			continue
+		}
+		switch *c.Name {
+		case VCPUs:
+			rl[corev1.ResourceCPU] = resource.MustParse(*c.Value)
+		case MemoryGB:
+			rl[corev1.ResourceMemory] = resource.MustParse(fmt.Sprintf("%sG", *c.Value))
+		}
+	}
+	return rl
 }
