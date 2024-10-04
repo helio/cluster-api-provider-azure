@@ -221,10 +221,7 @@ func (m *MachinePoolScope) ScaleSetSpec(ctx context.Context) azure.ResourceSpecG
 	}
 
 	if m.cache != nil {
-		if m.HasReplicasExternallyManaged(ctx) {
-			spec.ShouldPatchCustomData = m.cache.HasBootstrapDataChanges
-			log.V(4).Info("has bootstrap data changed?", "shouldPatchCustomData", spec.ShouldPatchCustomData)
-		}
+		spec.ShouldPatchCustomData = m.cache.HasBootstrapDataChanges
 		spec.VMSSExtensionSpecs = m.VMSSExtensionSpecs()
 		spec.SKU = m.cache.VMSKU
 		spec.VMImage = m.cache.VMImage
