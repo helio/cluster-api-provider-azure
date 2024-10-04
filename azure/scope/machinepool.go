@@ -702,11 +702,9 @@ func (m *MachinePoolScope) Close(ctx context.Context) error {
 		if err := m.updateReplicasAndProviderIDs(ctx); err != nil {
 			return errors.Wrap(err, "failed to update replicas and providerIDs")
 		}
-		if m.HasReplicasExternallyManaged(ctx) {
-			if err := m.updateCustomDataHash(ctx); err != nil {
-				// ignore errors to calculating the custom data hash since it's not absolutely crucial.
-				log.V(4).Error(err, "unable to update custom data hash, ignoring.")
-			}
+		if err := m.updateCustomDataHash(ctx); err != nil {
+			// ignore errors to calculating the custom data hash since it's not absolutely crucial.
+			log.V(4).Error(err, "unable to update custom data hash, ignoring.")
 		}
 	}
 
