@@ -37,6 +37,8 @@ type Client interface {
 
 	CreateOrUpdateAsync(ctx context.Context, spec azure.ResourceSpecGetter, resumeToken string, parameters interface{}) (result interface{}, poller *runtime.Poller[armcompute.VirtualMachineScaleSetsClientCreateOrUpdateResponse], err error)
 	DeleteAsync(ctx context.Context, spec azure.ResourceSpecGetter, resumeToken string) (poller *runtime.Poller[armcompute.VirtualMachineScaleSetsClientDeleteResponse], err error)
+
+	BeginUpdateInstances(ctx context.Context, spec azure.ResourceSpecGetter, vmInstanceIDs armcompute.VirtualMachineScaleSetVMInstanceRequiredIDs, resumeToken string) (*runtime.Poller[armcompute.VirtualMachineScaleSetsClientUpdateInstancesResponse], error)
 }
 
 // AzureClient contains the Azure go-sdk Client.
@@ -189,6 +191,37 @@ func (ac *AzureClient) DeleteAsync(ctx context.Context, spec azure.ResourceSpecG
 
 	opts := &armcompute.VirtualMachineScaleSetsClientBeginDeleteOptions{ResumeToken: resumeToken}
 	poller, err = ac.scalesets.BeginDelete(ctx, spec.ResourceGroupName(), spec.ResourceName(), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, ac.apiCallTimeout)
+	defer cancel()
+
+	pollOpts := &runtime.PollUntilDoneOptions{Frequency: async.DefaultPollerFrequency}
+	_, err = poller.PollUntilDone(ctx, pollOpts)
+	if err != nil {
+		// if an error occurs, return the Poller.
+		// this means the long-running operation didn't finish in the specified timeout.
+		return poller, err
+	}
+
+	// if the operation completed, return a nil poller.
+	return nil, err
+}
+
+// BeginUpdateInstances - Upgrades one or more virtual machines to the latest SKU set in the VM scale set model.
+// If the operation fails it returns an *azcore.ResponseError type.
+//
+// Parameters
+//   - spec - The ResourceSpecGetter containing used for name and resource group of the virtual machine scale set.
+//   - vmInstanceIDs - A list of virtual machine instance IDs from the VM scale set.
+func (ac *AzureClient) BeginUpdateInstances(ctx context.Context, spec azure.ResourceSpecGetter, vmInstanceIDs armcompute.VirtualMachineScaleSetVMInstanceRequiredIDs, resumeToken string) (poller *runtime.Poller[armcompute.VirtualMachineScaleSetsClientUpdateInstancesResponse], err error) {
+	ctx, _, done := tele.StartSpanWithLogger(ctx, "scalesets.AzureClient.BeginUpdateInstances")
+	defer done()
+
+	opts := &armcompute.VirtualMachineScaleSetsClientBeginUpdateInstancesOptions{ResumeToken: resumeToken}
+	poller, err = ac.scalesets.BeginUpdateInstances(ctx, spec.ResourceGroupName(), spec.ResourceName(), vmInstanceIDs, opts)
 	if err != nil {
 		return nil, err
 	}

@@ -222,10 +222,7 @@ func (m *MachinePoolScope) ScaleSetSpec(ctx context.Context) azure.ResourceSpecG
 	}
 
 	if m.cache != nil {
-		if m.HasReplicasExternallyManaged(ctx) {
-			spec.ShouldPatchCustomData = m.cache.HasBootstrapDataChanges
-			log.V(4).Info("has bootstrap data changed?", "shouldPatchCustomData", spec.ShouldPatchCustomData)
-		}
+		spec.ShouldPatchCustomData = m.cache.HasBootstrapDataChanges
 		spec.VMSSExtensionSpecs = m.VMSSExtensionSpecs()
 		spec.SKU = m.cache.VMSKU
 		spec.VMImage = m.cache.VMImage
@@ -614,10 +611,10 @@ func (m *MachinePoolScope) setProvisioningStateAndConditions(v infrav1.Provision
 		} else {
 			conditions.MarkFalse(m.AzureMachinePool, infrav1.ScaleSetDesiredReplicasCondition, infrav1.ScaleSetScaleDownReason, clusterv1.ConditionSeverityInfo, "")
 		}
-		m.SetNotReady()
+		m.SetReady()
 	case v == infrav1.Updating:
 		conditions.MarkFalse(m.AzureMachinePool, infrav1.ScaleSetModelUpdatedCondition, infrav1.ScaleSetModelOutOfDateReason, clusterv1.ConditionSeverityInfo, "")
-		m.SetNotReady()
+		m.SetReady()
 	case v == infrav1.Creating:
 		conditions.MarkFalse(m.AzureMachinePool, infrav1.ScaleSetRunningCondition, infrav1.ScaleSetCreatingReason, clusterv1.ConditionSeverityInfo, "")
 		m.SetNotReady()
@@ -705,11 +702,9 @@ func (m *MachinePoolScope) Close(ctx context.Context) error {
 		if err := m.updateReplicasAndProviderIDs(ctx); err != nil {
 			return errors.Wrap(err, "failed to update replicas and providerIDs")
 		}
-		if m.HasReplicasExternallyManaged(ctx) {
-			if err := m.updateCustomDataHash(ctx); err != nil {
-				// ignore errors to calculating the custom data hash since it's not absolutely crucial.
-				log.V(4).Error(err, "unable to update custom data hash, ignoring.")
-			}
+		if err := m.updateCustomDataHash(ctx); err != nil {
+			// ignore errors to calculating the custom data hash since it's not absolutely crucial.
+			log.V(4).Error(err, "unable to update custom data hash, ignoring.")
 		}
 	}
 

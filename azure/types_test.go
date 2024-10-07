@@ -17,6 +17,7 @@ limitations under the License.
 package azure
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -131,7 +132,7 @@ func TestVMSS_HasModelChanges(t *testing.T) {
 		t.Run(c.Name, func(t *testing.T) {
 			l, r := c.Factory()
 			g := NewWithT(t)
-			g.Expect(l.HasModelChanges(r)).To(Equal(c.HasModelChanges))
+			g.Expect(l.HasModelChanges(context.Background(), r)).To(Equal(c.HasModelChanges))
 		})
 	}
 }

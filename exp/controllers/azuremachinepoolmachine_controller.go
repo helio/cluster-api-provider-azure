@@ -295,8 +295,17 @@ func (ampmr *AzureMachinePoolMachineController) reconcileNormal(ctx context.Cont
 		ampmr.Recorder.Eventf(machineScope.AzureMachinePoolMachine, corev1.EventTypeWarning, "FailedVMState", "Azure scale set VM is in failed state")
 		machineScope.SetFailureReason(capierrors.UpdateMachineError)
 		machineScope.SetFailureMessage(errors.Errorf("Azure VM state is %s", state))
+	case infrav1.Succeeded:
+		ampmr.Recorder.Eventf(machineScope.AzureMachinePoolMachine, corev1.EventTypeNormal, "ProvisioningSucceeded", "Azure scale set VM is in succeeded state")
+		// clear failure reason/message in case it was there
+		// TODO(mw): not sure if this works, we also need to probably clear the failure reason/message in another way.
+		if machineScope.AzureMachinePoolMachine.Status.FailureReason != nil {
+			machineScope.SetFailureReason(capierrors.MachineStatusError(""))
+			machineScope.SetFailureMessage(errors.New(""))
+		}
 	case infrav1.Deleting:
-		log.V(4).Info("deleting machine because state is Deleting", "machine", machineScope.Name())
+		ampmr.Recorder.Eventf(machineScope.AzureMachinePoolMachine, corev1.EventTypeNormal, "Deleting", "Azure scale set VM is in deleting state")
+		log.V(2).Info("deleting machine because state is Deleting", "machine", machineScope.Name())
 		if err := ampmr.Client.Delete(ctx, machineScope.Machine); err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "machine failed to be deleted when deleting")
 		}
@@ -330,10 +339,15 @@ func (ampmr *AzureMachinePoolMachineController) reconcileDelete(ctx context.Cont
 		controllerutil.RemoveFinalizer(machineScope.AzureMachinePoolMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
 		return reconcile.Result{}, nil
 	}
-
 	if !machineScope.AzureMachinePool.ObjectMeta.DeletionTimestamp.IsZero() {
 		log.Info("Skipping VMSS VM deletion as VMSS delete will delete individual instances")
 
+		controllerutil.RemoveFinalizer(machineScope.AzureMachinePoolMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
+		return reconcile.Result{}, nil
+	}
+
+	if machineScope.ProvisioningState() == infrav1.Deleting || machineScope.ProvisioningState() == infrav1.Deleted {
+		log.V(2).Info(fmt.Sprintf("Skipping VMSS VM deletion as VMSS VM is already %s", machineScope.ProvisioningState()))
 		controllerutil.RemoveFinalizer(machineScope.AzureMachinePoolMachine, infrav1exp.AzureMachinePoolMachineFinalizer)
 		return reconcile.Result{}, nil
 	}
