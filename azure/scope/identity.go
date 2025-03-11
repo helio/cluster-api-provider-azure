@@ -24,7 +24,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-sdk-for-go/sdk/tracing/azotel"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +32,6 @@ import (
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-azure/azure"
-	"sigs.k8s.io/cluster-api-provider-azure/pkg/ot"
 	"sigs.k8s.io/cluster-api-provider-azure/util/tele"
 )
 
@@ -89,17 +87,17 @@ func (p *AzureCredentialsProvider) GetTokenCredential(ctx context.Context, resou
 	var authErr error
 	var cred azcore.TokenCredential
 
-	otelTP, err := ot.OTLPTracerProvider(ctx)
-	if err != nil {
-		return nil, err
-	}
-	tracingProvider := azotel.NewTracingProvider(otelTP, nil)
+	//otelTP, err := ot.OTLPTracerProvider(ctx)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//tracingProvider := azotel.NewTracingProvider(otelTP, nil)
 
 	switch p.Identity.Spec.Type {
 	case infrav1.WorkloadIdentity:
 		cred, authErr = p.cache.GetOrStoreWorkloadIdentity(&azidentity.WorkloadIdentityCredentialOptions{
 			ClientOptions: azcore.ClientOptions{
-				TracingProvider: tracingProvider,
+				//TracingProvider: tracingProvider,
 			},
 			TenantID:      p.Identity.Spec.TenantID,
 			ClientID:      p.Identity.Spec.ClientID,
@@ -116,7 +114,7 @@ func (p *AzureCredentialsProvider) GetTokenCredential(ctx context.Context, resou
 		}
 		options := azidentity.ClientSecretCredentialOptions{
 			ClientOptions: azcore.ClientOptions{
-				TracingProvider: tracingProvider,
+				//TracingProvider: tracingProvider,
 				Cloud: cloud.Configuration{
 					ActiveDirectoryAuthorityHost: activeDirectoryEndpoint,
 					Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
@@ -132,6 +130,7 @@ func (p *AzureCredentialsProvider) GetTokenCredential(ctx context.Context, resou
 
 	case infrav1.ServicePrincipalCertificate:
 		var certsContent []byte
+		var err error
 		if p.Identity.Spec.CertPath != "" {
 			certsContent, err = os.ReadFile(p.Identity.Spec.CertPath)
 			if err != nil {
@@ -146,14 +145,14 @@ func (p *AzureCredentialsProvider) GetTokenCredential(ctx context.Context, resou
 		}
 		cred, authErr = p.cache.GetOrStoreClientCert(p.GetTenantID(), p.Identity.Spec.ClientID, certsContent, nil, &azidentity.ClientCertificateCredentialOptions{
 			ClientOptions: azcore.ClientOptions{
-				TracingProvider: tracingProvider,
+				//TracingProvider: tracingProvider,
 			},
 		})
 
 	case infrav1.UserAssignedMSI:
 		options := azidentity.ManagedIdentityCredentialOptions{
 			ClientOptions: azcore.ClientOptions{
-				TracingProvider: tracingProvider,
+				//TracingProvider: tracingProvider,
 			},
 			ID: azidentity.ClientID(p.Identity.Spec.ClientID),
 		}

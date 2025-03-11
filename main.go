@@ -347,12 +347,12 @@ func main() {
 	// Setup the context that's going to be used in controllers and for the manager.
 	ctx := ctrl.SetupSignalHandler()
 
-	if enableTracing {
-		if err := ot.RegisterTracing(ctx, setupLog); err != nil {
-			setupLog.Error(err, "unable to initialize tracing")
-			os.Exit(1)
-		}
-	}
+	//if enableTracing {
+	//	if err := ot.RegisterTracing(ctx, setupLog); err != nil {
+	//		setupLog.Error(err, "unable to initialize tracing")
+	//		os.Exit(1)
+	//	}
+	//}
 
 	if err := ot.RegisterMetrics(); err != nil {
 		setupLog.Error(err, "unable to initialize metrics")

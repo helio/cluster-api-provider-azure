@@ -23,7 +23,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-sdk-for-go/sdk/tracing/azotel"
 	asoannotations "github.com/Azure/azure-service-operator/v2/pkg/common/annotations"
 	"github.com/Azure/azure-service-operator/v2/pkg/common/config"
 	corev1 "k8s.io/api/core/v1"
@@ -31,7 +30,6 @@ import (
 
 	"sigs.k8s.io/cluster-api-provider-azure/azure"
 	"sigs.k8s.io/cluster-api-provider-azure/azure/scope"
-	"sigs.k8s.io/cluster-api-provider-azure/pkg/ot"
 	"sigs.k8s.io/cluster-api-provider-azure/util/tele"
 )
 
@@ -98,13 +96,13 @@ func (c *asoCredentialCache) clientOptsForASOResource(ctx context.Context, obj c
 		return azcore.ClientOptions{}, err
 	}
 
-	otelTP, err := ot.OTLPTracerProvider(ctx)
-	if err != nil {
-		return azcore.ClientOptions{}, err
-	}
+	//otelTP, err := ot.OTLPTracerProvider(ctx)
+	//if err != nil {
+	//	return azcore.ClientOptions{}, err
+	//}
 
 	opts := azcore.ClientOptions{
-		TracingProvider: azotel.NewTracingProvider(otelTP, nil),
+		//TracingProvider: azotel.NewTracingProvider(otelTP, nil),
 		Cloud: cloud.Configuration{
 			ActiveDirectoryAuthorityHost: string(secret.Data[config.AzureAuthorityHost]),
 		},
