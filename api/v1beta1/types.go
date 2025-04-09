@@ -416,6 +416,18 @@ const (
 	Deleted ProvisioningState = "Deleted"
 )
 
+type PowerState string
+
+var (
+	DeallocatedPowerState  PowerState = "Deallocated"
+	DeallocatingPowerState PowerState = "Deallocating"
+	RunningPowerState      PowerState = "Running"
+	StartingPowerState     PowerState = "Starting"
+	StoppedPowerState      PowerState = "Stopped"
+	StoppingPowerState     PowerState = "Stopping"
+	UnknownPowerState      PowerState = "Unknown"
+)
+
 // Image defines information about the image to use for VM creation.
 // There are three ways to specify an image: by ID, Marketplace Image or SharedImageGallery
 // One of ID, SharedImage or Marketplace should be set.

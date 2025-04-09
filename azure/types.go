@@ -103,6 +103,7 @@ type (
 		Name               string                        `json:"name,omitempty"`
 		AvailabilityZone   string                        `json:"availabilityZone,omitempty"`
 		State              infrav1.ProvisioningState     `json:"vmState,omitempty"`
+		PowerState         infrav1.PowerState            `json:"powerState,omitempty"`
 		BootstrappingState infrav1.ProvisioningState     `json:"bootstrappingState,omitempty"`
 		OrchestrationMode  infrav1.OrchestrationModeType `json:"orchestrationMode,omitempty"`
 	}

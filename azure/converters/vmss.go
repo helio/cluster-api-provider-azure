@@ -18,6 +18,7 @@ package converters
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
 	"k8s.io/utils/ptr"
@@ -129,6 +130,32 @@ func SDKToVMSSVM(sdkInstance armcompute.VirtualMachineScaleSetVM) *azure.VMSSVM 
 	instance.State = infrav1.Creating
 	if sdkInstance.Properties.ProvisioningState != nil {
 		instance.State = infrav1.ProvisioningState(ptr.Deref(sdkInstance.Properties.ProvisioningState, ""))
+	}
+
+	if sdkInstance.Properties.InstanceView != nil {
+		for _, status := range sdkInstance.Properties.InstanceView.Statuses {
+			if status != nil && status.Code != nil && strings.HasPrefix(*status.Code, "PowerState/") {
+				code := strings.TrimLeft(*status.Code, "PowerState/")
+				var powerState infrav1.PowerState
+				switch code {
+				case "deallocated":
+					powerState = infrav1.DeallocatedPowerState
+				case "deallocating":
+					powerState = infrav1.DeallocatingPowerState
+				case "running":
+					powerState = infrav1.RunningPowerState
+				case "starting":
+					powerState = infrav1.StartingPowerState
+				case "stopped":
+					powerState = infrav1.StoppedPowerState
+				case "stopping":
+					powerState = infrav1.StoppingPowerState
+				case "unknown":
+					powerState = infrav1.UnknownPowerState
+				}
+				instance.PowerState = powerState
+			}
+		}
 	}
 
 	if sdkInstance.Properties.OSProfile != nil && sdkInstance.Properties.OSProfile.ComputerName != nil {
